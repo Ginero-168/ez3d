@@ -1,746 +1,500 @@
-// EventSpace 3D - Dynamic Grid and Carpet Paint System
+// EventSpace 3D — v2.1
+// Fix: Capture phase events so raycaster fires BEFORE OrbitControls
 
+// ─── Core Three.js Variables ───────────────────────────────────────────────
 let scene, camera, renderer, controls;
 let draggableObjects = [];
-let floorTiles = []; // Individual carpet tile meshes
+let floorTiles = [];
 let selectedObject = null;
 let isDragging = false;
-let didDrag = false; // Track if pointer actually moved (to separate click vs drag)
-let plane; // Plane for raycaster tracking
+let plane;
 let raycaster = new THREE.Raycaster();
 let mouse = new THREE.Vector2();
-let pointerDownMouse = new THREE.Vector2(); // Record where pointer went down
 let dragOffset = new THREE.Vector3();
 
-// State variables
-let currentMode = 'objects'; // 'objects' or 'paint'
-let activeCarpetBrushColor = '#374151'; // Active brush color for floor painting
+// ─── State ────────────────────────────────────────────────────────────────
+let currentMode = 'objects'; // 'objects' | 'paint'
+let activeCarpetBrushColor = '#374151';
 let spaceWidth = 16;
 let spaceLength = 3;
-let gridSnapSize = 0.5; // Grid snap interval in meters
-let gridSnapEnabled = true; // Toggle grid snapping
+let gridSnapSize = 0.5;
+let gridSnapEnabled = true;
+let isLightMode = false;
 
-// Procedural texture presets
-const texturePresets = {
-    sample_naiin: createNaiinPresetTexture(),
-    sample_kids: createKidsPresetTexture()
+// ─── Base physical dimensions at scale(1,1,1) in meters ───────────────────
+const BASE_DIMS = {
+    backdrop:  { w: 1,   h: 2.5,  d: 0.15 }, // w is dynamic (spaceWidth)
+    table:     { w: 1.5, h: 0.76, d: 0.75 },
+    bookshelf: { w: 1.4, h: 1.0,  d: 1.0  },
+    cashier:   { w: 1.0, h: 0.95, d: 0.85 },
+    rollup:    { w: 0.8, h: 2.0,  d: 0.05 },
 };
 
-// Initial submit handler from the Modal overlay
-function submitDimensions() {
-    const widthInput = document.getElementById('input-width');
-    const lengthInput = document.getElementById('input-length');
-    
-    let w = parseInt(widthInput.value) || 16;
-    let l = parseInt(lengthInput.value) || 3;
+// ─── Procedural Textures (created once) ───────────────────────────────────
+const texturePresets = {
+    sample_naiin: createNaiinPresetTexture(),
+    sample_kids:  createKidsPresetTexture()
+};
 
-    // Validate inputs
+// ══════════════════════════════════════════════════════════════════════════
+// SETUP MODAL
+// ══════════════════════════════════════════════════════════════════════════
+function submitDimensions() {
+    let w = parseInt(document.getElementById('input-width').value) || 16;
+    let l = parseInt(document.getElementById('input-length').value) || 3;
     w = Math.max(2, Math.min(50, w));
     l = Math.max(1, Math.min(15, l));
-
     spaceWidth = w;
     spaceLength = l;
 
-    // Update UI labels
-    document.getElementById('ui-current-dimensions').innerText = `${w.toFixed(2)} x ${l.toFixed(2)} เมตร`;
-    document.getElementById('ui-tile-count').innerText = `${w * l} แผ่น (1m x 1m)`;
-
-    // Hide modal, show viewport UI
+    document.getElementById('ui-current-dimensions').innerText = `${w} × ${l} เมตร`;
+    document.getElementById('ui-tile-count').innerText = `${w * l} แผ่น`;
     document.getElementById('setup-modal').classList.add('hidden');
     document.getElementById('main-ui').classList.remove('hidden');
 
-    // Initialize 3D Engine with entered dimensions
     init3D(w, l);
 }
 
-// Initialize the 3D workspace with dynamic dimensions
+// ══════════════════════════════════════════════════════════════════════════
+// 3D ENGINE INIT
+// ══════════════════════════════════════════════════════════════════════════
 function init3D(W, L) {
-    // 1. Scene Setup
+    // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0b0d);
     scene.fog = new THREE.FogExp2(0x0a0b0d, 0.015);
 
-    // 2. Camera Setup
+    // Camera
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    setCameraAngle('isometric_left');
 
-    // 3. Renderer Setup
+    // Renderer
     const canvas = document.getElementById('canvas3d');
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, preserveDrawingBuffer: true });
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // 4. Controls Setup
+    // Controls (added BEFORE our listeners — we'll use capture phase to override)
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2 - 0.01; // Block looking under floor
+    controls.maxPolarAngle = Math.PI / 2 - 0.01;
     controls.minDistance = 2;
     controls.maxDistance = 100;
 
-    // 5. Lights Setup
-    // Soft Ambient for general visibility
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
+    // Camera position
+    setCameraAngle('isometric_left');
 
-    // Directional light casting soft shadows
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(W, 30, L + 15);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 120;
+    dirLight.shadow.mapSize.set(2048, 2048);
     const d = Math.max(W, L) * 1.2;
-    dirLight.shadow.camera.left = -d;
-    dirLight.shadow.camera.right = d;
-    dirLight.shadow.camera.top = d;
-    dirLight.shadow.camera.bottom = -d;
+    Object.assign(dirLight.shadow.camera, { left: -d, right: d, top: d, bottom: -d });
     dirLight.shadow.bias = -0.0005;
     scene.add(dirLight);
+    const spot = new THREE.SpotLight(0x00f0ff, 0.6, 50, Math.PI / 4, 0.5, 1);
+    spot.position.set(0, 20, 0);
+    scene.add(spot);
 
-    // Subtle blue spotlight reflecting on the active zone
-    const spotLight = new THREE.SpotLight(0x00f0ff, 0.6, 50, Math.PI / 4, 0.5, 1);
-    spotLight.position.set(0, 20, 0);
-    spotLight.target.position.set(0, 0, 0);
-    scene.add(spotLight);
-
-    // 6. Invisible Ground Plane for dragging mathematics
-    const planeGeo = new THREE.PlaneGeometry(200, 200);
-    planeGeo.rotateX(-Math.PI / 2);
-    plane = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ visible: false }));
+    // Invisible drag plane
+    const pg = new THREE.PlaneGeometry(200, 200);
+    pg.rotateX(-Math.PI / 2);
+    plane = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ visible: false }));
     scene.add(plane);
 
-    // 7. Outer Grid Environment (Dark & subtle helper grid)
-    const gridHelper = new THREE.GridHelper(120, 60, 0x1f2937, 0x111827);
-    gridHelper.position.y = -0.02;
-    scene.add(gridHelper);
+    // Grid
+    const grid = new THREE.GridHelper(120, 60, 0x1f2937, 0x111827);
+    grid.position.y = -0.02;
+    scene.add(grid);
 
-    // 8. Generate Active Bright Floor tiles (WxL Carpet tiles)
+    // Floor tiles
     generateCarpetTiles(W, L);
 
-    // 9. Bounding Frame line showing edge of the active layout
-    const boundsGeo = new THREE.BoxGeometry(W, 0.04, L);
-    const edges = new THREE.EdgesGeometry(boundsGeo);
-    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x06b6d4 }));
-    line.position.set(0, -0.01, 0);
-    scene.add(line);
+    // Bounds line
+    const boundsEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(W, 0.04, L));
+    const boundsLine = new THREE.LineSegments(boundsEdges, new THREE.LineBasicMaterial({ color: 0x06b6d4 }));
+    boundsLine.position.set(0, -0.01, 0);
+    scene.add(boundsLine);
 
-    // 10. Default Backdrop Wall matching the exact custom Width at the back edge
-    const defaultBackdrop = spawnItem('backdrop', false);
-    defaultBackdrop.position.set(0, 1.25, -L / 2 + 0.075);
-    applyTextureToObject(defaultBackdrop, texturePresets.sample_naiin);
+    // Default backdrop
+    const backdrop = spawnItem('backdrop', false);
+    backdrop.position.set(0, 1.25, -L / 2 + 0.075);
+    applyTextureToObject(backdrop, texturePresets.sample_naiin);
 
-    // Listeners setup
-    window.addEventListener('resize', onWindowResize, false);
-    renderer.domElement.addEventListener('pointerdown', onPointerDown, false);
-    renderer.domElement.addEventListener('pointermove', onPointerMove, false);
-    renderer.domElement.addEventListener('pointerup', onPointerUp, false);
-    window.addEventListener('keydown', onKeyDown, false);
+    // ─── EVENT LISTENERS ─────────────────────────────────────────────────
+    // CRITICAL FIX: Use { capture: true } so our handlers fire BEFORE OrbitControls
+    // which listens in bubble phase. This lets us call stopPropagation() to
+    // prevent orbit when clicking/dragging objects.
+    window.addEventListener('resize', onWindowResize);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown, { capture: true });
+    renderer.domElement.addEventListener('pointermove', onPointerMove, { capture: true });
+    renderer.domElement.addEventListener('pointerup',   onPointerUp,   { capture: true });
+    window.addEventListener('keydown', onKeyDown);
 
+    updateLayerList();
     animate();
 }
 
-// Generate separate floor tiles that can be individually colored
+// ─── Floor Tiles ──────────────────────────────────────────────────────────
 function generateCarpetTiles(W, L) {
-    // Clean old tiles if any
-    floorTiles.forEach(tile => scene.remove(tile));
+    floorTiles.forEach(t => scene.remove(t));
     floorTiles = [];
-
-    // Tile geometry slightly smaller than 1.0m to create nice grout/seam lines (glowing space look)
-    const tileGeo = new THREE.BoxGeometry(0.96, 0.02, 0.96);
-
+    const geo = new THREE.BoxGeometry(0.96, 0.02, 0.96);
     for (let i = 0; i < W; i++) {
         for (let j = 0; j < L; j++) {
-            // Self-illuminated (emissive) carpet tiles to look bright in dark universe
-            const tileMat = new THREE.MeshStandardMaterial({
-                color: 0x27272a, // dark gray base
-                roughness: 0.9,
-                metalness: 0.1,
-                emissive: 0x09090b,
-                emissiveIntensity: 0.2
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0x27272a, roughness: 0.9, metalness: 0.1,
+                emissive: 0x09090b, emissiveIntensity: 0.2
             });
-
-            const tile = new THREE.Mesh(tileGeo, tileMat);
-            
-            // Align center of the grid to (0,0) coordinate
-            const xPos = i - W / 2 + 0.5;
-            const zPos = j - L / 2 + 0.5;
-            
-            tile.position.set(xPos, -0.01, zPos);
+            const tile = new THREE.Mesh(geo, mat);
+            tile.position.set(i - W / 2 + 0.5, -0.01, j - L / 2 + 0.5);
             tile.receiveShadow = true;
             tile.name = `tile_${i}_${j}`;
-            tile.userData = { type: 'floor_tile', x: i, z: j };
-
+            tile.userData = { type: 'floor_tile' };
             scene.add(tile);
             floorTiles.push(tile);
         }
     }
 }
 
-// Window resizing adjustments
+// ─── Resize ───────────────────────────────────────────────────────────────
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Spawns predefined elements procedurally
+// ══════════════════════════════════════════════════════════════════════════
+// SPAWN ITEMS
+// ══════════════════════════════════════════════════════════════════════════
 function spawnItem(type, selectNew = true) {
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.4, metalness: 0.1 });
     let mesh;
-    const material = new THREE.MeshStandardMaterial({
-        color: 0xe2e8f0,
-        roughness: 0.4,
-        metalness: 0.1
-    });
 
-    switch(type) {
+    switch (type) {
         case 'backdrop': {
-            // Width W (matching custom dimensions), Height 2.5m, Depth 0.15m
-            const geometry = new THREE.BoxGeometry(spaceWidth, 2.5, 0.15);
-            
-            // Texture maps only on front face (index 4)
-            const materials = [
-                material, // right
-                material, // left
-                material, // top
-                material, // bottom
-                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }), // front face
-                material  // back
-            ];
-            mesh = new THREE.Mesh(geometry, materials);
-            mesh.name = `แบคดรอปยาว ${spaceWidth}ม.`;
-            mesh.userData = { type: 'backdrop', category: 'wall' };
+            const W = spaceWidth;
+            const geo = new THREE.BoxGeometry(W, 2.5, 0.15);
+            const mats = [baseMat, baseMat, baseMat, baseMat,
+                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }),
+                baseMat];
+            mesh = new THREE.Mesh(geo, mats);
+            mesh.name = `แบคดรอป #${countType('backdrop') + 1}`;
+            mesh.userData = { type: 'backdrop', category: 'wall', baseDims: { w: W, h: 2.5, d: 0.15 } };
             break;
         }
         case 'table': {
             mesh = new THREE.Group();
-            
-            // Fabric cover skirt
-            const skirtGeo = new THREE.BoxGeometry(1.5, 0.72, 0.75);
-            const skirtMat = new THREE.MeshStandardMaterial({
-                color: 0x1d4ed8,
-                roughness: 0.7,
-                metalness: 0.0
-            });
-            const skirt = new THREE.Mesh(skirtGeo, skirtMat);
-            skirt.position.y = 0.36;
-            skirt.castShadow = true;
-            skirt.receiveShadow = true;
-            mesh.add(skirt);
-
-            // Tabletop
-            const topGeo = new THREE.BoxGeometry(1.54, 0.04, 0.79);
-            const topMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.6 });
-            const top = new THREE.Mesh(topGeo, topMat);
-            top.position.y = 0.74;
-            top.castShadow = true;
-            mesh.add(top);
-
-            mesh.name = "โต๊ะจัดแสดงสินค้า";
-            mesh.userData = { type: 'table', category: 'prop', targetColorMesh: skirt };
+            const skirtMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.7 });
+            const skirt = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.72, 0.75), skirtMat);
+            skirt.position.y = 0.36; skirt.castShadow = true; mesh.add(skirt);
+            const top = new THREE.Mesh(
+                new THREE.BoxGeometry(1.54, 0.04, 0.79),
+                new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.6 })
+            );
+            top.position.y = 0.74; top.castShadow = true; mesh.add(top);
+            mesh.name = `โต๊ะ #${countType('table') + 1}`;
+            mesh.userData = { type: 'table', category: 'prop', targetColorMesh: skirt, baseDims: { w: 1.5, h: 0.76, d: 0.75 } };
             break;
         }
         case 'bookshelf': {
             mesh = new THREE.Group();
-            const stepsCount = 4;
-            const w = 1.4;
-            const totalH = 1.0;
-            const totalD = 1.0;
-            const stepH = totalH / stepsCount;
-            const stepD = totalD / stepsCount;
-
-            for (let i = 0; i < stepsCount; i++) {
-                const boxW = w;
-                const boxH = stepH * (stepsCount - i);
-                const boxD = stepD;
-
-                const stepGeo = new THREE.BoxGeometry(boxW, boxH, boxD);
-                const stepMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.7 });
-                const step = new THREE.Mesh(stepGeo, stepMat);
-                
-                step.position.set(0, boxH / 2, -totalD/2 + (stepD * i) + (stepD/2));
-                step.castShadow = true;
-                step.receiveShadow = true;
-                mesh.add(step);
+            const steps = 4, bw = 1.4, totalH = 1.0, totalD = 1.0;
+            const stepH = totalH / steps, stepD = totalD / steps;
+            for (let i = 0; i < steps; i++) {
+                const bh = stepH * (steps - i);
+                const s = new THREE.Mesh(
+                    new THREE.BoxGeometry(bw, bh, stepD),
+                    new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.7 })
+                );
+                s.position.set(0, bh / 2, -totalD / 2 + stepD * i + stepD / 2);
+                s.castShadow = true; mesh.add(s);
             }
-
-            mesh.name = "ชั้นวางหนังสือขั้นบันได";
-            mesh.userData = { type: 'bookshelf', category: 'prop' };
+            mesh.name = `ชั้นวาง #${countType('bookshelf') + 1}`;
+            mesh.userData = { type: 'bookshelf', category: 'prop', baseDims: { w: 1.4, h: 1.0, d: 1.0 } };
             break;
         }
         case 'cashier': {
             mesh = new THREE.Group();
-
-            const baseGeo = new THREE.BoxGeometry(1.0, 0.9, 0.8);
-            const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
-            const base = new THREE.Mesh(baseGeo, baseMat);
-            base.position.y = 0.45;
-            base.castShadow = true;
-            base.receiveShadow = true;
-            mesh.add(base);
-
-            const counterTopGeo = new THREE.BoxGeometry(1.05, 0.05, 0.85);
-            const counterTopMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3 });
-            const counterTop = new THREE.Mesh(counterTopGeo, counterTopMat);
-            counterTop.position.y = 0.925;
-            counterTop.castShadow = true;
-            mesh.add(counterTop);
-
-            const monitorGeo = new THREE.BoxGeometry(0.3, 0.2, 0.05);
-            const monitorMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-            const monitor = new THREE.Mesh(monitorGeo, monitorMat);
-            monitor.position.set(0.1, 1.15, -0.1);
-            monitor.rotation.y = -Math.PI / 12;
-            mesh.add(monitor);
-
-            const monitorStandGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.2);
-            const monitorStand = new THREE.Mesh(monitorStandGeo, baseMat);
-            monitorStand.position.set(0.1, 1.025, -0.1);
-            mesh.add(monitorStand);
-
-            mesh.name = "เคาน์เตอร์คิดเงิน";
-            mesh.userData = { type: 'cashier', category: 'prop' };
+            const baseMat2 = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
+            const base = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 0.8), baseMat2);
+            base.position.y = 0.45; base.castShadow = true; mesh.add(base);
+            const cTop = new THREE.Mesh(
+                new THREE.BoxGeometry(1.05, 0.05, 0.85),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3 })
+            );
+            cTop.position.y = 0.925; mesh.add(cTop);
+            const mon = new THREE.Mesh(
+                new THREE.BoxGeometry(0.3, 0.2, 0.05),
+                new THREE.MeshBasicMaterial({ color: 0x111111 })
+            );
+            mon.position.set(0.1, 1.15, -0.1); mon.rotation.y = -Math.PI / 12; mesh.add(mon);
+            mesh.name = `แคชเชียร์ #${countType('cashier') + 1}`;
+            mesh.userData = { type: 'cashier', category: 'prop', targetColorMesh: base, baseDims: { w: 1.0, h: 0.95, d: 0.85 } };
             break;
         }
         case 'rollup': {
-            const geometry = new THREE.BoxGeometry(0.8, 2.0, 0.05);
-            const materials = [
-                material, // right
-                material, // left
-                material, // top
-                material, // bottom
-                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }), // front rollup face
-                material  // back
-            ];
-            mesh = new THREE.Mesh(geometry, materials);
-            
-            const baseGeo = new THREE.BoxGeometry(0.84, 0.08, 0.25);
-            const baseMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.2 });
-            const base = new THREE.Mesh(baseGeo, baseMat);
-            base.position.y = -1.0;
-            mesh.add(base);
-
-            mesh.name = "ป้ายโรลอัป";
-            mesh.userData = { type: 'rollup', category: 'banner' };
+            const geo = new THREE.BoxGeometry(0.8, 2.0, 0.05);
+            const mats = [baseMat, baseMat, baseMat, baseMat,
+                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }),
+                baseMat];
+            mesh = new THREE.Mesh(geo, mats);
+            const rb = new THREE.Mesh(
+                new THREE.BoxGeometry(0.84, 0.08, 0.25),
+                new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.2 })
+            );
+            rb.position.y = -1.0; mesh.add(rb);
+            mesh.name = `โรลอัป #${countType('rollup') + 1}`;
+            mesh.userData = { type: 'rollup', category: 'banner', baseDims: { w: 0.8, h: 2.0, d: 0.05 } };
             break;
         }
     }
 
-    if (mesh) {
-        // Initial positioning based on grid offsets
-        if (type !== 'backdrop' && type !== 'rollup') {
-            mesh.position.set(0, 0, 0);
-        } else if (type === 'rollup') {
-            mesh.position.set(0, 1.04, 0);
-        } else {
-            mesh.position.set(0, 1.25, 0);
-        }
+    if (!mesh) return null;
 
-        scene.add(mesh);
-        draggableObjects.push(mesh);
+    // Initial position
+    if (type === 'rollup')   mesh.position.set(0, 1.04, 0);
+    else if (type === 'backdrop') mesh.position.set(0, 1.25, 0);
+    else                     mesh.position.set(0, 0, 0);
 
-        if (selectNew) {
-            // Automatically switch back to Object Placement tab
-            setMode('objects');
-            selectObject(mesh);
-        }
-        return mesh;
+    scene.add(mesh);
+    draggableObjects.push(mesh);
+    updateLayerList();
+
+    if (selectNew) {
+        setMode('objects');
+        selectObject(mesh);
     }
+    return mesh;
 }
 
-// Raycaster clicks and dragging
+function countType(type) {
+    return draggableObjects.filter(o => o.userData.type === type).length;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// POINTER EVENTS — CAPTURE PHASE
+// ══════════════════════════════════════════════════════════════════════════
 function onPointerDown(event) {
     if (event.target.id !== 'canvas3d') return;
 
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.x = (event.clientX / window.innerWidth)  * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    pointerDownMouse.copy(mouse);
-    didDrag = false;
-
     raycaster.setFromCamera(mouse, camera);
 
     if (currentMode === 'paint') {
-        // --- PAINT MODE: Click to paint carpet tiles ---
-        const intersects = raycaster.intersectObjects(floorTiles);
-        if (intersects.length > 0) {
-            paintTile(intersects[0].object);
-        }
-    } else {
-        // --- OBJECT EDIT MODE: Select & Move 3D items ---
-        // FIX #1: Test hit FIRST before OrbitControls gets the event
-        const intersects = raycaster.intersectObjects(draggableObjects, true);
-
-        if (intersects.length > 0) {
-            // FIX #2: Correct group traversal — find the root object in draggableObjects
-            let target = intersects[0].object;
-            // Walk up the parent chain until we find an object registered in draggableObjects
-            while (target && !draggableObjects.includes(target)) {
-                target = target.parent;
-            }
-
-            if (target) {
-                selectObject(target);
-                isDragging = true;
-                controls.enabled = false; // Disable orbit so drag works correctly
-
-                const intersectPlane = raycaster.intersectObject(plane);
-                if (intersectPlane.length > 0) {
-                    dragOffset.copy(target.position).sub(intersectPlane[0].point);
-                    dragOffset.y = 0;
-                }
-            }
-        } else {
-            deselectObject();
-        }
-    }
-}
-
-function onPointerMove(event) {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-    // Paint mode — drag-paint across tiles
-    if (currentMode === 'paint' && event.buttons === 1) {
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(floorTiles);
-        if (intersects.length > 0) {
-            paintTile(intersects[0].object);
+        const hits = raycaster.intersectObjects(floorTiles);
+        if (hits.length > 0) {
+            paintTile(hits[0].object);
+            event.stopPropagation(); // block orbit while painting
         }
         return;
     }
 
-    if (!isDragging || !selectedObject || currentMode !== 'objects') return;
-
-    // Mark that actual dragging occurred (to distinguish from click)
-    const dx = mouse.x - pointerDownMouse.x;
-    const dz = mouse.y - pointerDownMouse.y;
-    if (Math.abs(dx) > 0.005 || Math.abs(dz) > 0.005) didDrag = true;
-
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObject(plane);
-
-    if (intersects.length > 0) {
-        const newPos = intersects[0].point.clone().add(dragOffset);
-
-        if (gridSnapEnabled) {
-            newPos.x = Math.round(newPos.x / gridSnapSize) * gridSnapSize;
-            newPos.z = Math.round(newPos.z / gridSnapSize) * gridSnapSize;
+    // Object selection mode
+    const hits = raycaster.intersectObjects(draggableObjects, true);
+    if (hits.length > 0) {
+        // Walk up to find the root object registered in draggableObjects
+        let target = hits[0].object;
+        while (target && !draggableObjects.includes(target)) {
+            target = target.parent;
         }
 
-        // FIX #2b: Use correct W/2 and L/2 boundaries from actual space dimensions
-        const xLimit = spaceWidth / 2 + 1.5; // Allow slight overflow for edge placement
-        const zLimit = spaceLength / 2 + 1.5;
-        newPos.x = Math.max(-xLimit, Math.min(xLimit, newPos.x));
-        newPos.z = Math.max(-zLimit, Math.min(zLimit, newPos.z));
+        if (target) {
+            // CRITICAL: stop OrbitControls from receiving this event
+            event.stopPropagation();
 
-        selectedObject.position.x = newPos.x;
-        selectedObject.position.z = newPos.z;
+            selectObject(target);
+            isDragging = true;
+            controls.enabled = false;
 
-        // Update position display in UI
-        updatePositionDisplay();
+            const planHit = raycaster.intersectObject(plane);
+            if (planHit.length > 0) {
+                dragOffset.copy(target.position).sub(planHit[0].point);
+                dragOffset.y = 0;
+            }
+        }
+    } else {
+        deselectObject();
+    }
+}
+
+function onPointerMove(event) {
+    mouse.x = (event.clientX / window.innerWidth)  * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    // Paint drag
+    if (currentMode === 'paint' && event.buttons === 1) {
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(floorTiles);
+        if (hits.length > 0) paintTile(hits[0].object);
+        return;
+    }
+
+    if (!isDragging || !selectedObject) return;
+
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObject(plane);
+    if (hits.length > 0) {
+        const pos = hits[0].point.clone().add(dragOffset);
+        if (gridSnapEnabled) {
+            pos.x = Math.round(pos.x / gridSnapSize) * gridSnapSize;
+            pos.z = Math.round(pos.z / gridSnapSize) * gridSnapSize;
+        }
+        const xl = spaceWidth  / 2 + 2;
+        const zl = spaceLength / 2 + 2;
+        pos.x = Math.max(-xl, Math.min(xl, pos.x));
+        pos.z = Math.max(-zl, Math.min(zl, pos.z));
+
+        selectedObject.position.x = pos.x;
+        selectedObject.position.z = pos.z;
+        syncTransformPanel();
     }
 }
 
 function onPointerUp() {
     isDragging = false;
     controls.enabled = true;
-    didDrag = false;
 }
 
-// Paint a single floor tile with active brush color
-function paintTile(tile) {
-    tile.material.color.set(activeCarpetBrushColor);
-    if (activeCarpetBrushColor === '#ffffff') {
-        tile.material.emissive.set('#444444');
-        tile.material.emissiveIntensity = 0.3;
-    } else {
-        tile.material.emissive.set(activeCarpetBrushColor);
-        tile.material.emissiveIntensity = 0.25;
-    }
-}
-
-// Keyboard shortcut handler
+// ─── Keyboard ────────────────────────────────────────────────────────────
 function onKeyDown(event) {
-    // Don't fire when user is typing in an input
-    if (event.target.tagName === 'INPUT') return;
-
+    if (['INPUT', 'TEXTAREA'].includes(event.target.tagName)) return;
     switch (event.key) {
         case 'Delete':
-        case 'Backspace':
-            deleteSelectedItem();
+        case 'Backspace': deleteSelectedItem(); break;
+        case 'Escape':    deselectObject();     break;
+        case 'r': case 'R':
+            if (selectedObject) { selectedObject.rotation.y += Math.PI / 4; syncTransformPanel(); }
             break;
-        case 'Escape':
-            deselectObject();
-            break;
-        case 'r':
-        case 'R':
-            if (selectedObject) {
-                selectedObject.rotation.y += Math.PI / 4; // Rotate 45°
-                syncRotationSlider();
-            }
-            break;
-        case 'g':
-        case 'G':
+        case 'g': case 'G':
             gridSnapEnabled = !gridSnapEnabled;
-            const snapBtn = document.getElementById('snap-toggle-btn');
-            if (snapBtn) snapBtn.textContent = gridSnapEnabled ? '⊞ Snap: ON' : '⊟ Snap: OFF';
+            const btn = document.getElementById('snap-toggle-btn');
+            if (btn) btn.textContent = gridSnapEnabled ? '⊞ Snap: ON' : '⊟ Snap: OFF';
             break;
-        case 'd':
-        case 'D':
-            if (event.ctrlKey || event.metaKey) {
-                event.preventDefault();
-                duplicateSelected();
-            }
+        case 'd': case 'D':
+            if (event.ctrlKey || event.metaKey) { event.preventDefault(); duplicateSelected(); }
             break;
     }
 }
 
-// Mode setting controller
-function setMode(mode) {
-    currentMode = mode;
-    
-    const tabObj = document.getElementById('tab-objects');
-    const tabPaint = document.getElementById('tab-paint');
-    const panelObj = document.getElementById('panel-object-mode');
-    const panelPaint = document.getElementById('panel-paint-mode');
-
-    if (mode === 'paint') {
-        deselectObject(); // Remove glows on selection
-        tabPaint.className = "py-4 text-xs font-semibold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all";
-        tabObj.className = "py-4 text-xs font-semibold uppercase tracking-wider text-white/50 hover:text-white transition-all";
-        panelPaint.classList.remove('hidden');
-        panelObj.classList.add('hidden');
-    } else {
-        tabObj.className = "py-4 text-xs font-semibold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all";
-        tabPaint.className = "py-4 text-xs font-semibold uppercase tracking-wider text-white/50 hover:text-white transition-all";
-        panelObj.classList.remove('hidden');
-        panelPaint.classList.add('hidden');
-    }
+// ─── Paint Tile ──────────────────────────────────────────────────────────
+function paintTile(tile) {
+    tile.material.color.set(activeCarpetBrushColor);
+    tile.material.emissive.set(activeCarpetBrushColor === '#ffffff' ? '#444444' : activeCarpetBrushColor);
+    tile.material.emissiveIntensity = 0.25;
 }
 
-// Carpet brush picking
-function selectCarpetBrush(color) {
-    activeCarpetBrushColor = color;
-    document.getElementById('carpet-brush-color-picker').value = color;
-    document.getElementById('carpet-brush-hex').innerText = `${color.toUpperCase()} (Active)`;
-
-    // Auto-switch to Paint Mode when clicking a color
-    if (currentMode !== 'paint') {
-        setMode('paint');
-    }
-}
-
-// Selects an object and highlights it visually
+// ══════════════════════════════════════════════════════════════════════════
+// SELECTION
+// ══════════════════════════════════════════════════════════════════════════
 function selectObject(object) {
-    if (selectedObject === object) return; // Already selected
+    if (selectedObject === object) return;
     if (selectedObject) deselectObject();
 
     selectedObject = object;
-    
-    // Add visual outline bounds helper
     selectedObject.userData.outlineHelper = new THREE.BoxHelper(selectedObject, 0x06b6d4);
     scene.add(selectedObject.userData.outlineHelper);
 
+    // Switch right panel to edit tab if currently in paint
+    if (currentMode === 'paint') setMode('objects');
+
     updateUI();
+    updateLayerList();
 }
 
-// Deselects and cleans helper outlines
 function deselectObject() {
-    if (selectedObject && selectedObject.userData.outlineHelper) {
+    if (selectedObject?.userData?.outlineHelper) {
         scene.remove(selectedObject.userData.outlineHelper);
         selectedObject.userData.outlineHelper.dispose();
         delete selectedObject.userData.outlineHelper;
     }
     selectedObject = null;
     updateUI();
+    updateLayerList();
 }
 
-// Duplicate the currently selected object
-function duplicateSelected() {
-    if (!selectedObject) return;
-    const type = selectedObject.userData.type;
-    if (!type) return;
-    const newObj = spawnItem(type, false);
-    if (newObj) {
-        newObj.position.set(
-            selectedObject.position.x + 1,
-            selectedObject.position.y,
-            selectedObject.position.z + 1
-        );
-        newObj.rotation.y = selectedObject.rotation.y;
-        selectObject(newObj);
-    }
-}
+// ══════════════════════════════════════════════════════════════════════════
+// LAYER LIST
+// ══════════════════════════════════════════════════════════════════════════
+function updateLayerList() {
+    const container = document.getElementById('layer-list');
+    if (!container) return;
+    container.innerHTML = '';
 
-// Deletes the selected object
-function deleteSelectedItem() {
-    if (!selectedObject) return;
-
-    const index = draggableObjects.indexOf(selectedObject);
-    if (index > -1) {
-        draggableObjects.splice(index, 1);
-    }
-    
-    scene.remove(selectedObject);
-    selectedObject.traverse((node) => {
-        if (node.geometry) node.geometry.dispose();
-        if (node.material) {
-            if (Array.isArray(node.material)) {
-                node.material.forEach(m => m.dispose());
-            } else {
-                node.material.dispose();
-            }
-        }
-    });
-
-    deselectObject();
-}
-
-// Reset workspace objects
-function clearAllWorkspace() {
-    deselectObject();
-    
-    const objectsToRemove = [...draggableObjects];
-    objectsToRemove.forEach(obj => {
-        scene.remove(obj);
-        obj.traverse((node) => {
-            if (node.geometry) node.geometry.dispose();
-            if (node.material) {
-                if (Array.isArray(node.material)) {
-                    node.material.forEach(m => m.dispose());
-                } else {
-                    node.material.dispose();
-                }
-            }
-        });
-    });
-
-    draggableObjects = [];
-}
-
-// Change colors of selected object (table, bookshelf, cashier)
-function changeSelectedColor(hexColor) {
-    if (!selectedObject) return;
-
-    document.getElementById('color-hex').innerText = hexColor;
-    const targetMesh = selectedObject.userData.targetColorMesh || selectedObject;
-
-    // Handle direct mesh with single material
-    if (targetMesh.material && !Array.isArray(targetMesh.material)) {
-        targetMesh.material.color.set(hexColor);
+    if (draggableObjects.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-white/30 text-xs"><p>ยังไม่มีวัตถุในฉาก</p><p class="mt-1 text-[10px]">เพิ่มจาก Assets →</p></div>`;
         return;
     }
 
-    // Handle Group — color ALL child meshes that have non-array material
-    if (targetMesh.isGroup || !targetMesh.material) {
-        targetMesh.traverse((child) => {
-            if (child.isMesh && child.material && !Array.isArray(child.material)) {
-                // Skip metallic parts (monitor, stand)
-                if (child.material.metalness < 0.5) {
-                    child.material.color.set(hexColor);
-                }
-            }
-        });
-    }
+    const icons = { backdrop: '🖼️', table: '🪑', bookshelf: '📚', cashier: '🖥️', rollup: '🪧' };
+
+    // Reverse so newest is on top
+    [...draggableObjects].reverse().forEach(obj => {
+        const sel = obj === selectedObject;
+        const item = document.createElement('div');
+        item.className = [
+            'flex items-center space-x-2 px-3 py-2 rounded-xl cursor-pointer transition-all text-xs border',
+            sel
+                ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                : 'bg-white/5 border-transparent hover:bg-white/10 text-white/80'
+        ].join(' ');
+        item.onclick = () => { showLeftTab('layers'); selectObject(obj); };
+        item.innerHTML = `
+            <span class="text-base flex-shrink-0">${icons[obj.userData.type] || '📦'}</span>
+            <span class="flex-1 truncate font-medium">${obj.name}</span>
+            ${sel ? '<span class="text-cyan-400 text-[10px] flex-shrink-0">✓ Active</span>' : ''}
+        `;
+        container.appendChild(item);
+    });
 }
 
-// Apply rotation from Y-axis slider
-function applyRotation(degrees) {
-    if (!selectedObject) return;
-    selectedObject.rotation.y = THREE.MathUtils.degToRad(parseFloat(degrees));
-    const label = document.getElementById('rotation-label');
-    if (label) label.innerText = Math.round(degrees) + '°';
-}
-
-// Custom texture uploading
-function uploadTexture(input) {
-    if (!selectedObject || !input.files || !input.files[0]) return;
-
-    const file = input.files[0];
-    const reader = new FileReader();
-
-    reader.onload = function(event) {
-        const image = new Image();
-        image.src = event.target.result;
-        image.onload = function() {
-            const texture = new THREE.Texture(image);
-            texture.needsUpdate = true;
-            applyTextureToObject(selectedObject, texture);
-        };
-    };
-
-    reader.readAsDataURL(file);
-}
-
-// Preset texture picker
-function applyPresetTexture(presetKey) {
-    if (!selectedObject || !texturePresets[presetKey]) return;
-    applyTextureToObject(selectedObject, texturePresets[presetKey]);
-}
-
-function applyTextureToObject(obj, texture) {
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.minFilter = THREE.LinearFilter;
-
-    if (Array.isArray(obj.material)) {
-        // Front face mapping (index 4)
-        if (obj.material[4]) {
-            obj.material[4].map = texture;
-            obj.material[4].needsUpdate = true;
-        }
-    } else if (obj.material) {
-        obj.material.map = texture;
-        obj.material.needsUpdate = true;
-    }
-}
-
-// Viewport UI toggle values
+// ══════════════════════════════════════════════════════════════════════════
+// UI — PROPERTY PANEL
+// ══════════════════════════════════════════════════════════════════════════
 function updateUI() {
-    const unselected = document.getElementById('unselected-panel');
-    const selected = document.getElementById('selected-panel');
+    const unsel = document.getElementById('unselected-panel');
+    const sel   = document.getElementById('selected-panel');
 
     if (!selectedObject) {
-        unselected.classList.remove('hidden');
-        selected.classList.add('hidden');
+        unsel.classList.remove('hidden');
+        sel.classList.add('hidden');
         return;
     }
 
-    unselected.classList.add('hidden');
-    selected.classList.remove('hidden');
+    unsel.classList.add('hidden');
+    sel.classList.remove('hidden');
 
     const type = selectedObject.userData.type;
-    const titleEl = document.getElementById('selected-title');
-    const badgeEl = document.getElementById('selected-badge');
+    document.getElementById('selected-title').innerText = selectedObject.name;
+    document.getElementById('selected-badge').innerText = type.toUpperCase();
 
-    titleEl.innerText = selectedObject.name;
-    badgeEl.innerText = type.toUpperCase();
-
-    // FIX #3: Show correct controls for every object type
-    const colorCtrl = document.getElementById('control-color');
+    // Color control visibility
+    const colorCtrl   = document.getElementById('control-color');
     const textureCtrl = document.getElementById('control-texture');
-
-    // Types that support cloth/body color
-    const colorTypes = ['table', 'bookshelf', 'cashier'];
-    // Types that support texture/banner upload
+    const colorTypes   = ['table', 'bookshelf', 'cashier'];
     const textureTypes = ['backdrop', 'rollup'];
 
     if (colorTypes.includes(type)) {
         colorCtrl.classList.remove('hidden');
         textureCtrl.classList.add('hidden');
-        // Get color from targetColorMesh if present, otherwise from object itself
-        const colorSource = selectedObject.userData.targetColorMesh || selectedObject;
-        let hexColor = 'ffffff';
-        if (colorSource.material && !Array.isArray(colorSource.material)) {
-            hexColor = colorSource.material.color.getHexString();
-        } else if (Array.isArray(colorSource.material) && colorSource.material[0]) {
-            hexColor = colorSource.material[0].color.getHexString();
+        // Get current color
+        const src = selectedObject.userData.targetColorMesh || selectedObject;
+        let hex = '1d4ed8';
+        if (src.isMesh && !Array.isArray(src.material)) {
+            hex = src.material.color.getHexString();
+        } else {
+            src.traverse(c => {
+                if (c.isMesh && !Array.isArray(c.material) && c.material.metalness < 0.5)
+                    hex = c.material.color.getHexString();
+            });
         }
-        document.getElementById('color-input').value = '#' + hexColor;
-        document.getElementById('color-hex').innerText = '#' + hexColor;
+        document.getElementById('color-input').value = '#' + hex;
+        document.getElementById('color-hex').innerText = '#' + hex.toUpperCase();
     } else if (textureTypes.includes(type)) {
         colorCtrl.classList.add('hidden');
         textureCtrl.classList.remove('hidden');
@@ -749,214 +503,334 @@ function updateUI() {
         textureCtrl.classList.add('hidden');
     }
 
-    // Update rotation slider
-    syncRotationSlider();
-    // Update position display
-    updatePositionDisplay();
+    syncTransformPanel();
 }
 
-// Sync rotation slider to current selected object's Y rotation
-function syncRotationSlider() {
-    const slider = document.getElementById('rotation-slider');
-    const label = document.getElementById('rotation-label');
-    if (!slider || !selectedObject) return;
-    const deg = THREE.MathUtils.radToDeg(selectedObject.rotation.y) % 360;
-    const normalized = ((deg % 360) + 360) % 360;
-    slider.value = Math.round(normalized);
-    if (label) label.innerText = Math.round(normalized) + '°';
+// ─── Transform Panel Sync ─────────────────────────────────────────────────
+function syncTransformPanel() {
+    if (!selectedObject) return;
+    const { position: p, rotation: r, scale: s } = selectedObject;
+
+    _setInput('tf-pos-x', p.x.toFixed(2));
+    _setInput('tf-pos-y', p.y.toFixed(2));
+    _setInput('tf-pos-z', p.z.toFixed(2));
+    _setInput('tf-rot-x', THREE.MathUtils.radToDeg(r.x).toFixed(1));
+    _setInput('tf-rot-y', THREE.MathUtils.radToDeg(r.y).toFixed(1));
+    _setInput('tf-rot-z', THREE.MathUtils.radToDeg(r.z).toFixed(1));
+    _setInput('tf-scale-x', s.x.toFixed(2));
+    _setInput('tf-scale-y', s.y.toFixed(2));
+    _setInput('tf-scale-z', s.z.toFixed(2));
+
+    // Physical dimensions in meters
+    const dims = selectedObject.userData.baseDims;
+    if (dims) {
+        _setInput('dim-w', (dims.w * s.x).toFixed(2));
+        _setInput('dim-h', (dims.h * s.y).toFixed(2));
+        _setInput('dim-d', (dims.d * s.z).toFixed(2));
+    }
 }
 
-// Update position display label
-function updatePositionDisplay() {
-    const posEl = document.getElementById('position-display');
-    if (!posEl || !selectedObject) return;
-    const x = selectedObject.position.x.toFixed(1);
-    const z = selectedObject.position.z.toFixed(1);
-    posEl.innerText = `X: ${x}m  Z: ${z}m`;
+function _setInput(id, val) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = val;
 }
 
-// Reset camera view angles based on dynamic dimensions to frame the grid
+// ─── Transform Setters ───────────────────────────────────────────────────
+function setPositionX(v) { if (selectedObject) { selectedObject.position.x = _f(v); syncTransformPanel(); } }
+function setPositionY(v) { if (selectedObject) { selectedObject.position.y = _f(v); syncTransformPanel(); } }
+function setPositionZ(v) { if (selectedObject) { selectedObject.position.z = _f(v); syncTransformPanel(); } }
+
+function setRotationX(v) { if (selectedObject) { selectedObject.rotation.x = THREE.MathUtils.degToRad(_f(v)); syncTransformPanel(); } }
+function setRotationY(v) { if (selectedObject) { selectedObject.rotation.y = THREE.MathUtils.degToRad(_f(v)); syncTransformPanel(); } }
+function setRotationZ(v) { if (selectedObject) { selectedObject.rotation.z = THREE.MathUtils.degToRad(_f(v)); syncTransformPanel(); } }
+
+function setScaleX(v) { if (selectedObject) { selectedObject.scale.x = Math.max(0.05, _f(v)); syncTransformPanel(); } }
+function setScaleY(v) { if (selectedObject) { selectedObject.scale.y = Math.max(0.05, _f(v)); syncTransformPanel(); } }
+function setScaleZ(v) { if (selectedObject) { selectedObject.scale.z = Math.max(0.05, _f(v)); syncTransformPanel(); } }
+
+// Dimension → scale conversion
+function setDimW(meters) {
+    if (!selectedObject?.userData?.baseDims) return;
+    setScaleX(_f(meters) / selectedObject.userData.baseDims.w);
+}
+function setDimH(meters) {
+    if (!selectedObject?.userData?.baseDims) return;
+    setScaleY(_f(meters) / selectedObject.userData.baseDims.h);
+}
+function setDimD(meters) {
+    if (!selectedObject?.userData?.baseDims) return;
+    setScaleZ(_f(meters) / selectedObject.userData.baseDims.d);
+}
+
+// Legacy alias
+function applyRotation(degrees) { setRotationY(degrees); }
+
+function _f(v) { return parseFloat(v) || 0; }
+
+// ══════════════════════════════════════════════════════════════════════════
+// MODE & TABS
+// ══════════════════════════════════════════════════════════════════════════
+function showLeftTab(tab) {
+    const tabA = document.getElementById('tab-assets');
+    const tabL = document.getElementById('tab-layers');
+    const panA = document.getElementById('panel-assets');
+    const panL = document.getElementById('panel-layers');
+    const act  = 'py-3 text-[10px] font-bold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all flex-1';
+    const inact = 'py-3 text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-all flex-1';
+
+    if (tab === 'layers') {
+        tabA.className = inact; tabL.className = act;
+        panA.classList.add('hidden'); panL.classList.remove('hidden');
+        updateLayerList();
+    } else {
+        tabA.className = act; tabL.className = inact;
+        panA.classList.remove('hidden'); panL.classList.add('hidden');
+    }
+}
+
+function setMode(mode) {
+    currentMode = mode;
+    const tabE  = document.getElementById('tab-edit');
+    const tabP  = document.getElementById('tab-paint');
+    const panE  = document.getElementById('panel-object-mode');
+    const panP  = document.getElementById('panel-paint-mode');
+    const act   = 'py-3 text-[10px] font-bold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all flex-1';
+    const inact  = 'py-3 text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-all flex-1';
+
+    if (mode === 'paint') {
+        deselectObject();
+        if (tabE) tabE.className = inact;
+        if (tabP) tabP.className = act;
+        if (panE) panE.classList.add('hidden');
+        if (panP) panP.classList.remove('hidden');
+    } else {
+        if (tabE) tabE.className = act;
+        if (tabP) tabP.className = inact;
+        if (panE) panE.classList.remove('hidden');
+        if (panP) panP.classList.add('hidden');
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// OBJECT OPERATIONS
+// ══════════════════════════════════════════════════════════════════════════
+function changeSelectedColor(hexColor) {
+    if (!selectedObject) return;
+    document.getElementById('color-hex').innerText = hexColor.toUpperCase();
+
+    const target = selectedObject.userData.targetColorMesh || selectedObject;
+    if (target.isMesh && !Array.isArray(target.material)) {
+        target.material.color.set(hexColor);
+    } else {
+        target.traverse(c => {
+            if (c.isMesh && !Array.isArray(c.material) && c.material.metalness < 0.5)
+                c.material.color.set(hexColor);
+        });
+    }
+}
+
+function duplicateSelected() {
+    if (!selectedObject) return;
+    const type = selectedObject.userData.type;
+    const newObj = spawnItem(type, false);
+    if (newObj) {
+        newObj.position.copy(selectedObject.position);
+        newObj.position.x += 1.0;
+        newObj.rotation.copy(selectedObject.rotation);
+        newObj.scale.copy(selectedObject.scale);
+        selectObject(newObj);
+    }
+}
+
+function deleteSelectedItem() {
+    if (!selectedObject) return;
+    const idx = draggableObjects.indexOf(selectedObject);
+    if (idx > -1) draggableObjects.splice(idx, 1);
+    if (selectedObject.userData.outlineHelper) scene.remove(selectedObject.userData.outlineHelper);
+    scene.remove(selectedObject);
+    selectedObject.traverse(n => {
+        if (n.geometry) n.geometry.dispose();
+        if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => m.dispose());
+    });
+    selectedObject = null;
+    updateUI();
+    updateLayerList();
+}
+
+function clearAllWorkspace() {
+    deselectObject();
+    [...draggableObjects].forEach(obj => {
+        scene.remove(obj);
+        obj.traverse(n => {
+            if (n.geometry) n.geometry.dispose();
+            if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => m.dispose());
+        });
+    });
+    draggableObjects = [];
+    updateLayerList();
+}
+
+// ─── Carpet ───────────────────────────────────────────────────────────────
+function selectCarpetBrush(color) {
+    activeCarpetBrushColor = color;
+    const p = document.getElementById('carpet-brush-color-picker');
+    const h = document.getElementById('carpet-brush-hex');
+    if (p) p.value = color;
+    if (h) h.innerText = color.toUpperCase() + ' (Active)';
+    if (currentMode !== 'paint') setMode('paint');
+}
+
+// ─── Texture ──────────────────────────────────────────────────────────────
+function uploadTexture(input) {
+    if (!selectedObject || !input.files?.[0]) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const img = new Image();
+        img.src = e.target.result;
+        img.onload = () => {
+            const tex = new THREE.Texture(img);
+            tex.needsUpdate = true;
+            applyTextureToObject(selectedObject, tex);
+        };
+    };
+    reader.readAsDataURL(input.files[0]);
+}
+
+function applyPresetTexture(key) {
+    if (!selectedObject || !texturePresets[key]) return;
+    applyTextureToObject(selectedObject, texturePresets[key]);
+}
+
+function applyTextureToObject(obj, texture) {
+    texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    if (Array.isArray(obj.material)) {
+        if (obj.material[4]) { obj.material[4].map = texture; obj.material[4].needsUpdate = true; }
+    } else if (obj.material) {
+        obj.material.map = texture; obj.material.needsUpdate = true;
+    }
+}
+
+// ─── Camera ───────────────────────────────────────────────────────────────
 function setCameraAngle(angle) {
-    const targetX = 0;
-    const targetY = 1;
-    const targetZ = 0;
-    
-    if (controls) controls.target.set(targetX, targetY, targetZ);
-
-    const W = spaceWidth;
-    const L = spaceLength;
-    const offsetFactor = Math.max(W, L) * 0.9;
-
-    switch(angle) {
-        case 'top':
-            camera.position.set(0, offsetFactor * 1.5, 0.01);
-            break;
-        case 'isometric_left':
-            camera.position.set(-offsetFactor, offsetFactor * 0.7, offsetFactor * 0.8);
-            break;
-        case 'isometric_right':
-            camera.position.set(offsetFactor, offsetFactor * 0.7, offsetFactor * 0.8);
-            break;
+    const of = Math.max(spaceWidth, spaceLength) * 0.9;
+    if (controls) controls.target.set(0, 1, 0);
+    switch (angle) {
+        case 'top':              camera.position.set(0, of * 1.5, 0.01); break;
+        case 'isometric_left':  camera.position.set(-of, of * 0.7, of * 0.8); break;
+        case 'isometric_right': camera.position.set(of,  of * 0.7, of * 0.8); break;
     }
+    if (controls) controls.update();
 }
 
-// Export canvas image mockup
+// ─── Light Mode ───────────────────────────────────────────────────────────
+function toggleLightMode() {
+    isLightMode = !isLightMode;
+    document.body.classList.toggle('light-mode', isLightMode);
+    if (scene) {
+        const bg = isLightMode ? 0xf2ede4 : 0x0a0b0d;
+        scene.background = new THREE.Color(bg);
+        if (scene.fog) scene.fog.color.set(bg);
+    }
+    const btn = document.getElementById('light-mode-btn');
+    if (btn) btn.textContent = isLightMode ? '🌙 Dark' : '☀️ Light';
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────
 function captureMockup() {
-    let cachedHelper = null;
-    if (selectedObject && selectedObject.userData.outlineHelper) {
-        cachedHelper = selectedObject.userData.outlineHelper;
-        scene.remove(cachedHelper);
+    let helper = null;
+    if (selectedObject?.userData?.outlineHelper) {
+        helper = selectedObject.userData.outlineHelper;
+        scene.remove(helper);
     }
-
     renderer.render(scene, camera);
-    const imgData = renderer.domElement.toDataURL('image/png');
-    
-    if (selectedObject && cachedHelper) {
-        scene.add(cachedHelper);
-    }
-
-    const link = document.createElement('a');
-    link.download = `EventSpace-Mockup-${spaceWidth}mx${spaceLength}m.png`;
-    link.href = imgData;
-    link.click();
+    const url = renderer.domElement.toDataURL('image/png');
+    if (helper) scene.add(helper);
+    const a = document.createElement('a');
+    a.download = `EventSpace-${spaceWidth}x${spaceLength}m.png`;
+    a.href = url; a.click();
 }
 
-// Procedural Canvas Texture 1
+// ══════════════════════════════════════════════════════════════════════════
+// PROCEDURAL TEXTURES
+// ══════════════════════════════════════════════════════════════════════════
 function createNaiinPresetTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 2048;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+    const c = document.createElement('canvas');
+    c.width = 2048; c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 2048, 256);
     ctx.fillStyle = '#f97316';
-    ctx.beginPath();
-    ctx.moveTo(100, 0);
-    ctx.lineTo(250, 0);
-    ctx.lineTo(150, 256);
-    ctx.lineTo(0, 256);
-    ctx.fill();
-
+    ctx.beginPath(); ctx.moveTo(100,0); ctx.lineTo(250,0); ctx.lineTo(150,256); ctx.lineTo(0,256); ctx.fill();
     ctx.fillStyle = '#ea580c';
-    ctx.beginPath();
-    ctx.moveTo(250, 0);
-    ctx.lineTo(350, 0);
-    ctx.lineTo(250, 256);
-    ctx.lineTo(150, 256);
-    ctx.fill();
-
-    ctx.strokeStyle = '#06b6d4';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(550, 40, 948, 176);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 56px sans-serif';
-    ctx.fillText("ร้านนายอินทร์ NAIIN ROADSHOW 2026", 620, 110);
-
-    ctx.fillStyle = '#f97316';
-    ctx.font = '500 36px sans-serif';
-    ctx.fillText("@ MRT พหลโยธิน - ขีดความสุขของการอ่านหนังสือ", 620, 170);
-
-    ctx.fillStyle = '#a855f7';
-    ctx.beginPath();
-    ctx.arc(1750, 128, 60, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 70px sans-serif';
-    ctx.fillText("📚", 1715, 150);
-
-    return new THREE.CanvasTexture(canvas);
+    ctx.beginPath(); ctx.moveTo(250,0); ctx.lineTo(350,0); ctx.lineTo(250,256); ctx.lineTo(150,256); ctx.fill();
+    ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 4; ctx.strokeRect(550, 40, 948, 176);
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 56px sans-serif';
+    ctx.fillText('ร้านนายอินทร์ NAIIN ROADSHOW 2026', 620, 110);
+    ctx.fillStyle = '#f97316'; ctx.font = '500 36px sans-serif';
+    ctx.fillText('@ MRT พหลโยธิน - ขีดความสุขของการอ่านหนังสือ', 620, 170);
+    ctx.fillStyle = '#a855f7'; ctx.beginPath(); ctx.arc(1750,128,60,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 70px sans-serif'; ctx.fillText('📚', 1715, 150);
+    return new THREE.CanvasTexture(c);
 }
 
-// Procedural Canvas Texture 2
 function createKidsPresetTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 2048;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
-    gradient.addColorStop(0, '#a855f7');
-    gradient.addColorStop(1, '#ec4899');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    for(let i=0; i<15; i++) {
+    const c = document.createElement('canvas');
+    c.width = 2048; c.height = 256;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 2048, 0);
+    g.addColorStop(0, '#a855f7'); g.addColorStop(1, '#ec4899');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 2048, 256);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    for (let i = 0; i < 15; i++) {
         ctx.beginPath();
-        ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, 20 + Math.random()*50, 0, Math.PI*2);
+        ctx.arc(Math.random()*2048, Math.random()*256, 20+Math.random()*50, 0, Math.PI*2);
         ctx.fill();
     }
-
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-    ctx.shadowBlur = 10;
-    
+    ctx.fillStyle = '#ffffff'; ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 10;
     ctx.font = 'bold 72px sans-serif';
-    ctx.fillText("นายอินทร์ KIDS & MANGA FAIR 🧸", 480, 120);
-
-    ctx.shadowBlur = 0;
+    ctx.fillText('นายอินทร์ KIDS & MANGA FAIR 🧸', 480, 120);
+    ctx.shadowBlur = 0; ctx.fillStyle = '#fef08a'; ctx.font = 'bold 36px sans-serif';
+    ctx.fillText('ลดสูงสุด 50% • การ์ตูน วรรณกรรมเยาวชน และไลท์โนเวลครบครันที่นี่!', 485, 180);
     ctx.fillStyle = '#fef08a';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.fillText("ลดสูงสุด 50% • การ์ตูน วรรณกรรมเยาวชน และไลท์โนเวลครบครันที่นี่!", 485, 180);
-
-    ctx.fillStyle = '#fef08a';
-    drawStar(ctx, 300, 128, 5, 50, 20);
-    drawStar(ctx, 1750, 128, 5, 50, 20);
-
-    return new THREE.CanvasTexture(canvas);
+    drawStar(ctx,300,128,5,50,20); drawStar(ctx,1750,128,5,50,20);
+    return new THREE.CanvasTexture(c);
 }
 
-function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) {
-    let rot = Math.PI / 2 * 3;
-    let x = cx;
-    let y = cy;
-    let step = Math.PI / spikes;
-
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - outerRadius);
+function drawStar(ctx, cx, cy, spikes, outer, inner) {
+    let rot = Math.PI/2*3, x=cx, y=cy, step=Math.PI/spikes;
+    ctx.beginPath(); ctx.moveTo(cx, cy - outer);
     for (let i = 0; i < spikes; i++) {
-        x = cx + Math.cos(rot) * outerRadius;
-        y = cy + Math.sin(rot) * outerRadius;
-        ctx.lineTo(x, y);
-        rot += step;
-
-        x = cx + Math.cos(rot) * innerRadius;
-        y = cy + Math.sin(rot) * innerRadius;
-        ctx.lineTo(x, y);
-        rot += step;
+        x = cx + Math.cos(rot)*outer; y = cy + Math.sin(rot)*outer; ctx.lineTo(x,y); rot+=step;
+        x = cx + Math.cos(rot)*inner; y = cy + Math.sin(rot)*inner; ctx.lineTo(x,y); rot+=step;
     }
-    ctx.lineTo(cx, cy - outerRadius);
-    ctx.closePath();
-    ctx.fill();
+    ctx.lineTo(cx, cy-outer); ctx.closePath(); ctx.fill();
 }
 
-// Render loop
+// ─── Render Loop ──────────────────────────────────────────────────────────
 function animate() {
     requestAnimationFrame(animate);
-
-    if (selectedObject && selectedObject.userData.outlineHelper) {
-        selectedObject.userData.outlineHelper.update();
-    }
-
+    if (selectedObject?.userData?.outlineHelper) selectedObject.userData.outlineHelper.update();
     if (controls) controls.update();
     if (renderer) renderer.render(scene, camera);
 }
 
-// Bind functions to window object so they are globally accessible for HTML inline onclick event handlers
-window.submitDimensions = submitDimensions;
-window.spawnItem = spawnItem;
-window.setMode = setMode;
+// ─── Global Bindings ──────────────────────────────────────────────────────
+window.submitDimensions  = submitDimensions;
+window.spawnItem         = spawnItem;
+window.setMode           = setMode;
+window.showLeftTab       = showLeftTab;
 window.selectCarpetBrush = selectCarpetBrush;
 window.deleteSelectedItem = deleteSelectedItem;
 window.clearAllWorkspace = clearAllWorkspace;
 window.changeSelectedColor = changeSelectedColor;
-window.uploadTexture = uploadTexture;
+window.uploadTexture     = uploadTexture;
 window.applyPresetTexture = applyPresetTexture;
-window.setCameraAngle = setCameraAngle;
-window.captureMockup = captureMockup;
-window.applyRotation = applyRotation;
+window.setCameraAngle    = setCameraAngle;
+window.captureMockup     = captureMockup;
 window.duplicateSelected = duplicateSelected;
+window.toggleLightMode   = toggleLightMode;
+window.applyRotation     = applyRotation;
+window.setPositionX = setPositionX; window.setPositionY = setPositionY; window.setPositionZ = setPositionZ;
+window.setRotationX = setRotationX; window.setRotationY = setRotationY; window.setRotationZ = setRotationZ;
+window.setScaleX    = setScaleX;    window.setScaleY    = setScaleY;    window.setScaleZ    = setScaleZ;
+window.setDimW = setDimW; window.setDimH = setDimH; window.setDimD = setDimD;
