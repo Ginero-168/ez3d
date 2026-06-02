@@ -1,0 +1,24 @@
+{
+  "name": "eventspace-3d-mockup",
+  "version": "1.0.0",
+  "description": "Interactive 3D Event Mockup Editor with paintable carpet grid.",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "threejs",
+    "3d",
+    "event",
+    "mockup",
+    "canvas",
+    "editor"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
