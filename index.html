@@ -4,376 +4,547 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EventSpace 3D | Mockup Studio</title>
-    <!-- Google Fonts: Inter -->
+    <meta name="description" content="สร้าง Mockup พื้นที่จัดงานนิทรรศการ 3D แบบ Interactive">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                }
-            }
-        }
+        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } } }
     </script>
-    <!-- Three.js and OrbitControls via CDN -->
+    <style>
+        /* ── Light Mode Overrides ─────────────────────────────────────── */
+        body.light-mode { background: #f2ede4 !important; }
+
+        body.light-mode header,
+        body.light-mode aside,
+        body.light-mode footer {
+            background: rgba(242, 237, 228, 0.94) !important;
+            border-color: rgba(0,0,0,0.1) !important;
+        }
+        body.light-mode .text-white { color: #1a1208 !important; }
+        body.light-mode .text-white\/80 { color: #2a2010 !important; }
+        body.light-mode .text-white\/70 { color: #3a3020 !important; }
+        body.light-mode .text-white\/60 { color: #4a4030 !important; }
+        body.light-mode .text-white\/50 { color: #5a5040 !important; }
+        body.light-mode .text-white\/40 { color: #6a6050 !important; }
+        body.light-mode .text-white\/30 { color: #7a7060 !important; }
+        body.light-mode .bg-black\/40,
+        body.light-mode .bg-black\/60 { background: rgba(242,237,228,0.94) !important; }
+        body.light-mode .bg-white\/5  { background: rgba(0,0,0,0.04) !important; }
+        body.light-mode .bg-white\/10 { background: rgba(0,0,0,0.07) !important; }
+        body.light-mode .border-white\/10 { border-color: rgba(0,0,0,0.1) !important; }
+        body.light-mode .border-white\/5  { border-color: rgba(0,0,0,0.06) !important; }
+        body.light-mode .border-white\/15 { border-color: rgba(0,0,0,0.12) !important; }
+        body.light-mode input[type="number"],
+        body.light-mode input[type="text"] { color: #1a1208 !important; }
+
+        /* ── Input Styles ─────────────────────────────────────────────── */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        input[type=range] { accent-color: #06b6d4; }
+
+        /* ── Scrollbars ───────────────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+        /* ── Section divider label ────────────────────────────────────── */
+        .section-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.35);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .section-label::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255,255,255,0.08);
+        }
+        body.light-mode .section-label { color: rgba(0,0,0,0.3); }
+        body.light-mode .section-label::after { background: rgba(0,0,0,0.08); }
+    </style>
+    <!-- Three.js r128 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script type="module" crossorigin src="./assets/index-B98y3dmu.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-Bwv-938O.css">
+  <script type="module" crossorigin src="./assets/index-CvLbOQPb.js"></script>
 </head>
 <body class="bg-[#0b0c10] text-[#c5c6c7] font-sans h-screen w-screen overflow-hidden select-none">
 
-    <!-- 1. Sizing Setup Modal (Shown first, overlaying everything) -->
-    <div id="setup-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-lg transition-all duration-500">
-        <div class="bg-black/60 border border-white/10 p-8 rounded-3xl w-full max-w-md shadow-2xl text-center space-y-6">
-            <!-- Logo Accent -->
-            <div class="relative w-16 h-16 mx-auto flex items-center justify-center">
-                <svg class="w-12 h-12 filter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]" viewBox="0 0 62 94" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <g style="mix-blend-mode:multiply">
-                        <path d="M59.4 45L30.7 46.8L5.2 91.6L28.2 65.4C36.5 55.9 47.3 48.9 59.4 45Z" fill="#FFFF00"/>
-                        <path d="M2 48.6L30.7 46.8L56.1 2L33.1 28.2C24.8 37.7 14 44.7 2 48.6Z" fill="#FFFF00"/>
-                    </g>
-                    <g style="mix-blend-mode:multiply">
-                        <path d="M60.4 45.5L31.7 47.3L6.2 92.1L29.2 65.9C37.5 56.4 48.3 49.4 60.4 45.5Z" fill="#00FFFF"/>
-                        <path d="M3 49.1L31.7 47.3L57.1 2.5L34.1 28.7C25.8 38.2 15 45.2 3 49.1Z" fill="#00FFFF"/>
-                    </g>
-                </svg>
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SETUP MODAL
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="setup-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl">
+    <div class="bg-black/60 border border-white/10 p-8 rounded-3xl w-full max-w-sm shadow-2xl text-center space-y-6">
+
+        <div class="w-16 h-16 mx-auto">
+            <svg viewBox="0 0 62 94" fill="none" class="w-full h-full filter drop-shadow-[0_0_12px_rgba(6,182,212,0.6)]">
+                <g style="mix-blend-mode:multiply">
+                    <path d="M59.4 45L30.7 46.8L5.2 91.6L28.2 65.4C36.5 55.9 47.3 48.9 59.4 45Z" fill="#FFFF00"/>
+                    <path d="M2 48.6L30.7 46.8L56.1 2L33.1 28.2C24.8 37.7 14 44.7 2 48.6Z" fill="#FFFF00"/>
+                </g>
+                <g style="mix-blend-mode:multiply">
+                    <path d="M60.4 45.5L31.7 47.3L6.2 92.1L29.2 65.9C37.5 56.4 48.3 49.4 60.4 45.5Z" fill="#00FFFF"/>
+                    <path d="M3 49.1L31.7 47.3L57.1 2.5L34.1 28.7C25.8 38.2 15 45.2 3 49.1Z" fill="#00FFFF"/>
+                </g>
+            </svg>
+        </div>
+
+        <div>
+            <h2 class="text-white font-bold text-2xl tracking-wider">EventSpace 3D</h2>
+            <p class="text-xs text-white/40 mt-1">กำหนดขนาดพื้นที่จัดงานของคุณ</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 text-left">
+            <div class="space-y-2">
+                <label class="text-xs text-white/60 font-medium block">กว้าง (เมตร)</label>
+                <input type="number" id="input-width" value="16" min="2" max="50"
+                    class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 font-mono text-center text-xl transition-all">
+                <span class="text-[10px] text-white/30 block">2 – 50 ม.</span>
             </div>
+            <div class="space-y-2">
+                <label class="text-xs text-white/60 font-medium block">ยาว (เมตร)</label>
+                <input type="number" id="input-length" value="3" min="1" max="15"
+                    class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 font-mono text-center text-xl transition-all">
+                <span class="text-[10px] text-white/30 block">1 – 15 ม.</span>
+            </div>
+        </div>
+
+        <button onclick="submitDimensions()"
+            class="w-full bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-black font-bold rounded-xl py-4 transition-all shadow-[0_0_24px_rgba(6,182,212,0.5)] tracking-wider text-sm">
+            ✦ สร้างพื้นที่ 3D
+        </button>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     3D CANVAS
+     ═══════════════════════════════════════════════════════════════════════ -->
+<canvas id="canvas3d" class="absolute inset-0 w-full h-full z-0 block outline-none"></canvas>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MAIN UI OVERLAY
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="main-ui" class="hidden absolute inset-0 pointer-events-none z-10 flex flex-col p-4 gap-3">
+
+    <!-- ── HEADER ─────────────────────────────────────────────────────── -->
+    <header class="pointer-events-auto flex items-center justify-between bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-3 shadow-2xl flex-shrink-0">
+        <div class="flex items-center space-x-3">
+            <svg viewBox="0 0 62 94" fill="none" class="w-7 h-7 filter drop-shadow-[0_0_6px_rgba(0,255,244,0.5)]">
+                <g style="mix-blend-mode:multiply">
+                    <path d="M59.4 45L30.7 46.8L5.2 91.6L28.2 65.4C36.5 55.9 47.3 48.9 59.4 45Z" fill="#FFFF00"/>
+                    <path d="M2 48.6L30.7 46.8L56.1 2L33.1 28.2C24.8 37.7 14 44.7 2 48.6Z" fill="#FFFF00"/>
+                </g>
+                <g style="mix-blend-mode:multiply">
+                    <path d="M60.4 45.5L31.7 47.3L6.2 92.1L29.2 65.9C37.5 56.4 48.3 49.4 60.4 45.5Z" fill="#00FFFF"/>
+                    <path d="M3 49.1L31.7 47.3L57.1 2.5L34.1 28.7C25.8 38.2 15 45.2 3 49.1Z" fill="#00FFFF"/>
+                </g>
+            </svg>
             <div>
-                <h2 class="text-white font-bold text-2xl tracking-wider">EventSpace 3D</h2>
-                <p class="text-xs text-white/50 mt-1">เริ่มต้นสร้างพื้นที่จัดงานนิทรรศการบูธของคุณ</p>
+                <h1 class="text-white font-bold text-sm tracking-widest">EventSpace 3D</h1>
+                <p class="text-[10px] text-white/40" id="ui-current-dimensions">16 × 3 เมตร</p>
+            </div>
+        </div>
+
+        <!-- Keyboard hints -->
+        <div class="hidden lg:flex items-center space-x-3 text-[10px] text-white/40 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
+            <span><kbd class="bg-white/10 px-1.5 py-0.5 rounded text-cyan-400 text-[9px]">Del</kbd> ลบ</span>
+            <span class="text-white/20">|</span>
+            <span><kbd class="bg-white/10 px-1.5 py-0.5 rounded text-cyan-400 text-[9px]">R</kbd> หมุน45°</span>
+            <span class="text-white/20">|</span>
+            <span><kbd class="bg-white/10 px-1.5 py-0.5 rounded text-cyan-400 text-[9px]">G</kbd> Snap</span>
+            <span class="text-white/20">|</span>
+            <span><kbd class="bg-white/10 px-1.5 py-0.5 rounded text-cyan-400 text-[9px]">Ctrl+D</kbd> คัดลอก</span>
+        </div>
+
+        <div class="flex items-center space-x-2">
+            <button id="light-mode-btn" onclick="toggleLightMode()"
+                class="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-1.5 text-xs transition-all text-white/70">
+                ☀️ Light
+            </button>
+            <div class="text-right">
+                <div class="text-[10px] text-white/40">Tiles</div>
+                <div class="text-sm font-bold text-cyan-400" id="ui-tile-count">0</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ── MAIN CONTENT AREA ──────────────────────────────────────────── -->
+    <div class="flex-1 flex gap-3 min-h-0">
+
+        <!-- ════════════════════════════════════════════════════════════
+             LEFT PANEL — Assets + Layers
+             ════════════════════════════════════════════════════════════ -->
+        <aside class="pointer-events-auto w-64 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex flex-col overflow-hidden shadow-2xl flex-shrink-0">
+
+            <!-- Tabs: Assets | Layers -->
+            <div class="grid grid-cols-2 border-b border-white/10 flex-shrink-0">
+                <button id="tab-assets" onclick="showLeftTab('assets')"
+                    class="py-3 text-[10px] font-bold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all flex-1">
+                    📦 Assets
+                </button>
+                <button id="tab-layers" onclick="showLeftTab('layers')"
+                    class="py-3 text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-all flex-1">
+                    📋 Layers
+                </button>
             </div>
 
-            <!-- Size Inputs -->
-            <div class="grid grid-cols-2 gap-4 text-left">
-                <div class="space-y-2">
-                    <label class="text-xs text-white/60 block font-medium">กว้าง (เมตร)</label>
-                    <input type="number" id="input-width" value="16" min="2" max="50" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 transition-all font-mono text-center text-lg">
-                    <span class="text-[10px] text-white/30 block">จำกัด 2 - 50ม.</span>
+            <!-- ── Panel: Assets ── -->
+            <div id="panel-assets" class="flex-1 flex flex-col overflow-hidden">
+                <div class="flex-1 overflow-y-auto p-3 space-y-1.5">
+                    <!-- Backdrop -->
+                    <button onclick="spawnItem('backdrop')"
+                        class="w-full flex items-center p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/40 transition-all group text-left">
+                        <div class="w-9 h-9 bg-white/5 rounded-lg flex items-center justify-center text-base group-hover:scale-105 transition-transform flex-shrink-0">🖼️</div>
+                        <div class="ml-2.5 min-w-0">
+                            <span class="text-white font-medium block text-xs truncate">ผนังแบคดรอป</span>
+                            <span class="text-[10px] text-white/35">เต็มความกว้างพื้นที่</span>
+                        </div>
+                    </button>
+                    <!-- Table -->
+                    <button onclick="spawnItem('table')"
+                        class="w-full flex items-center p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/40 transition-all group text-left">
+                        <div class="w-9 h-9 bg-white/5 rounded-lg flex items-center justify-center text-base group-hover:scale-105 transition-transform flex-shrink-0">🪑</div>
+                        <div class="ml-2.5 min-w-0">
+                            <span class="text-white font-medium block text-xs truncate">โต๊ะคลุมผ้า</span>
+                            <span class="text-[10px] text-white/35">1.50 × 0.75 ม.</span>
+                        </div>
+                    </button>
+                    <!-- Bookshelf -->
+                    <button onclick="spawnItem('bookshelf')"
+                        class="w-full flex items-center p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/40 transition-all group text-left">
+                        <div class="w-9 h-9 bg-white/5 rounded-lg flex items-center justify-center text-base group-hover:scale-105 transition-transform flex-shrink-0">📚</div>
+                        <div class="ml-2.5 min-w-0">
+                            <span class="text-white font-medium block text-xs truncate">ชั้นขั้นบันไดโชว์ของ</span>
+                            <span class="text-[10px] text-white/35">1.40 × 1.00 ม.</span>
+                        </div>
+                    </button>
+                    <!-- Cashier -->
+                    <button onclick="spawnItem('cashier')"
+                        class="w-full flex items-center p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/40 transition-all group text-left">
+                        <div class="w-9 h-9 bg-white/5 rounded-lg flex items-center justify-center text-base group-hover:scale-105 transition-transform flex-shrink-0">🖥️</div>
+                        <div class="ml-2.5 min-w-0">
+                            <span class="text-white font-medium block text-xs truncate">เคาน์เตอร์คิดเงิน</span>
+                            <span class="text-[10px] text-white/35">1.00 × 0.80 ม.</span>
+                        </div>
+                    </button>
+                    <!-- Rollup -->
+                    <button onclick="spawnItem('rollup')"
+                        class="w-full flex items-center p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/40 transition-all group text-left">
+                        <div class="w-9 h-9 bg-white/5 rounded-lg flex items-center justify-center text-base group-hover:scale-105 transition-transform flex-shrink-0">🪧</div>
+                        <div class="ml-2.5 min-w-0">
+                            <span class="text-white font-medium block text-xs truncate">ป้ายโรลอัป</span>
+                            <span class="text-[10px] text-white/35">0.80 × 2.00 ม.</span>
+                        </div>
+                    </button>
                 </div>
-                <div class="space-y-2">
-                    <label class="text-xs text-white/60 block font-medium">ยาว (เมตร)</label>
-                    <input type="number" id="input-length" value="3" min="1" max="15" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 transition-all font-mono text-center text-lg">
-                    <span class="text-[10px] text-white/30 block">จำกัด 1 - 15ม.</span>
+
+                <!-- Camera Controls -->
+                <div class="p-3 border-t border-white/10 bg-white/5 space-y-2 flex-shrink-0">
+                    <p class="text-[9px] text-white/40 font-medium uppercase tracking-wider">มุมกล้อง</p>
+                    <div class="flex space-x-1.5">
+                        <button onclick="setCameraAngle('top')"
+                            class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] hover:bg-white/10 hover:border-cyan-400/50 transition-all">
+                            แปลน
+                        </button>
+                        <button onclick="setCameraAngle('isometric_left')"
+                            class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] hover:bg-white/10 hover:border-cyan-400/50 transition-all">
+                            ซ้าย
+                        </button>
+                        <button onclick="setCameraAngle('isometric_right')"
+                            class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] hover:bg-white/10 hover:border-cyan-400/50 transition-all">
+                            ขวา
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <button onclick="submitDimensions()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-xl py-4 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] text-md tracking-wider">
-                สร้างพื้นที่ 3D (Generate Space)
+            <!-- ── Panel: Layers ── -->
+            <div id="panel-layers" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div class="px-3 py-2 border-b border-white/10 flex-shrink-0">
+                    <p class="text-[10px] text-white/40">คลิกชื่อเพื่อเลือกวัตถุ</p>
+                </div>
+                <div id="layer-list" class="flex-1 overflow-y-auto p-2 space-y-1">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- ════════════════════════════════════════════════════════════
+             RIGHT PANEL — Transform & Properties
+             ════════════════════════════════════════════════════════════ -->
+        <aside class="pointer-events-auto w-72 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex flex-col overflow-hidden shadow-2xl flex-shrink-0 ml-auto">
+
+            <!-- Tabs: Edit | Paint -->
+            <div class="grid grid-cols-2 border-b border-white/10 flex-shrink-0">
+                <button id="tab-edit" onclick="setMode('objects')"
+                    class="py-3 text-[10px] font-bold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all flex-1">
+                    🪄 แก้ไข
+                </button>
+                <button id="tab-paint" onclick="setMode('paint')"
+                    class="py-3 text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-all flex-1">
+                    🎨 ระบายพรม
+                </button>
+            </div>
+
+            <!-- ── Panel: Paint Mode ── -->
+            <div id="panel-paint-mode" class="hidden flex-1 flex flex-col p-4 space-y-4 overflow-y-auto">
+                <div>
+                    <h3 class="text-white font-semibold text-sm">ระบายสีพรม</h3>
+                    <p class="text-[10px] text-white/40 mt-0.5">เลือกสีแล้วคลิก / ลากที่ช่องพื้น 3D</p>
+                </div>
+                <div class="space-y-2">
+                    <p class="section-label">สีพรีเซ็ต</p>
+                    <div class="grid grid-cols-4 gap-1.5">
+                        <button onclick="selectCarpetBrush('#374151')" class="h-8 rounded-lg border-2 border-white/10 bg-[#374151] hover:scale-105 transition-all" title="เทาเข้ม"></button>
+                        <button onclick="selectCarpetBrush('#1e3a8a')" class="h-8 rounded-lg border-2 border-transparent bg-[#1e3a8a] hover:scale-105 transition-all" title="กรมท่า"></button>
+                        <button onclick="selectCarpetBrush('#ef4444')" class="h-8 rounded-lg border-2 border-transparent bg-[#ef4444] hover:scale-105 transition-all" title="แดง"></button>
+                        <button onclick="selectCarpetBrush('#15803d')" class="h-8 rounded-lg border-2 border-transparent bg-[#15803d] hover:scale-105 transition-all" title="เขียว"></button>
+                        <button onclick="selectCarpetBrush('#d97706')" class="h-8 rounded-lg border-2 border-transparent bg-[#d97706] hover:scale-105 transition-all" title="ทอง"></button>
+                        <button onclick="selectCarpetBrush('#7e22ce')" class="h-8 rounded-lg border-2 border-transparent bg-[#7e22ce] hover:scale-105 transition-all" title="ม่วง"></button>
+                        <button onclick="selectCarpetBrush('#f43f5e')" class="h-8 rounded-lg border-2 border-transparent bg-[#f43f5e] hover:scale-105 transition-all" title="ชมพู"></button>
+                        <button onclick="selectCarpetBrush('#ffffff')" class="h-8 rounded-lg border-2 border-white/20 bg-white hover:scale-105 transition-all" title="ขาว"></button>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <p class="section-label">สีกำหนดเอง</p>
+                    <div class="flex items-center space-x-3 bg-white/5 p-2.5 rounded-xl border border-white/5">
+                        <input type="color" id="carpet-brush-color-picker" oninput="selectCarpetBrush(this.value)" value="#374151"
+                            class="w-8 h-8 border-0 bg-transparent rounded cursor-pointer outline-none">
+                        <span class="text-xs font-mono" id="carpet-brush-hex">#374151 (Active)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Panel: Object Edit Mode ── -->
+            <div id="panel-object-mode" class="flex-1 flex flex-col overflow-hidden">
+
+                <!-- Unselected state -->
+                <div id="unselected-panel" class="flex-1 flex flex-col justify-center items-center p-6 text-center">
+                    <div class="w-12 h-12 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-white/20 mb-3 animate-pulse">
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/>
+                        </svg>
+                    </div>
+                    <p class="text-white/60 text-xs font-medium">ยังไม่ได้เลือกวัตถุ</p>
+                    <p class="text-[10px] text-white/30 mt-1">คลิกวัตถุในฉาก หรือเลือกจาก Layers</p>
+                </div>
+
+                <!-- Selected state -->
+                <div id="selected-panel" class="hidden flex-1 flex flex-col overflow-hidden">
+
+                    <!-- Object header -->
+                    <div class="px-4 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+                        <div class="min-w-0 mr-2">
+                            <h2 class="text-white font-semibold text-sm truncate" id="selected-title">Object</h2>
+                        </div>
+                        <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 flex-shrink-0" id="selected-badge">TYPE</span>
+                    </div>
+
+                    <!-- Scrollable properties -->
+                    <div class="flex-1 overflow-y-auto p-3 space-y-4">
+
+                        <!-- ── POSITION ── -->
+                        <div class="space-y-1.5">
+                            <p class="section-label">📍 ตำแหน่ง (Position)</p>
+                            <div class="grid grid-cols-3 gap-1.5">
+                                <div>
+                                    <div class="text-[9px] text-red-400 font-bold font-mono text-center mb-1">X</div>
+                                    <input type="number" id="tf-pos-x" step="0.1"
+                                        onchange="setPositionX(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-red-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                                <div>
+                                    <div class="text-[9px] text-green-400 font-bold font-mono text-center mb-1">Y</div>
+                                    <input type="number" id="tf-pos-y" step="0.1"
+                                        onchange="setPositionY(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-green-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                                <div>
+                                    <div class="text-[9px] text-blue-400 font-bold font-mono text-center mb-1">Z</div>
+                                    <input type="number" id="tf-pos-z" step="0.1"
+                                        onchange="setPositionZ(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-blue-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ── ROTATION ── -->
+                        <div class="space-y-1.5">
+                            <p class="section-label">🔄 หมุน (Rotation °)</p>
+                            <div class="grid grid-cols-3 gap-1.5">
+                                <div>
+                                    <div class="text-[9px] text-red-400 font-bold font-mono text-center mb-1">X</div>
+                                    <input type="number" id="tf-rot-x" step="5"
+                                        onchange="setRotationX(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-red-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                                <div>
+                                    <div class="text-[9px] text-green-400 font-bold font-mono text-center mb-1">Y</div>
+                                    <input type="number" id="tf-rot-y" step="5"
+                                        onchange="setRotationY(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-green-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                                <div>
+                                    <div class="text-[9px] text-blue-400 font-bold font-mono text-center mb-1">Z</div>
+                                    <input type="number" id="tf-rot-z" step="5"
+                                        onchange="setRotationZ(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-blue-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                            </div>
+                            <!-- Quick Y presets -->
+                            <div class="flex space-x-1">
+                                <button onclick="setRotationY(0)"   class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">0°</button>
+                                <button onclick="setRotationY(45)"  class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">45°</button>
+                                <button onclick="setRotationY(90)"  class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">90°</button>
+                                <button onclick="setRotationY(180)" class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">180°</button>
+                                <button onclick="setRotationY(270)" class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">270°</button>
+                            </div>
+                        </div>
+
+                        <!-- ── SCALE ── -->
+                        <div class="space-y-1.5">
+                            <p class="section-label">⚖️ สเกล (Scale)</p>
+                            <div class="grid grid-cols-3 gap-1.5">
+                                <div>
+                                    <div class="text-[9px] text-red-400 font-bold font-mono text-center mb-1">X</div>
+                                    <input type="number" id="tf-scale-x" step="0.05" min="0.05"
+                                        onchange="setScaleX(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-red-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                                <div>
+                                    <div class="text-[9px] text-green-400 font-bold font-mono text-center mb-1">Y</div>
+                                    <input type="number" id="tf-scale-y" step="0.05" min="0.05"
+                                        onchange="setScaleY(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-green-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                                <div>
+                                    <div class="text-[9px] text-blue-400 font-bold font-mono text-center mb-1">Z</div>
+                                    <input type="number" id="tf-scale-z" step="0.05" min="0.05"
+                                        onchange="setScaleZ(this.value)"
+                                        class="w-full bg-white/5 border border-white/10 focus:border-blue-400/60 rounded-lg px-1 py-1.5 text-white text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ── DIMENSIONS (meters) ── -->
+                        <div class="space-y-1.5">
+                            <p class="section-label">📐 มิติ (เมตร)</p>
+                            <div class="grid grid-cols-3 gap-1.5">
+                                <div>
+                                    <div class="text-[9px] text-white/40 text-center mb-1">กว้าง W</div>
+                                    <input type="number" id="dim-w" step="0.1" min="0.1"
+                                        onchange="setDimW(this.value)"
+                                        class="w-full bg-cyan-500/5 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-1 py-1.5 text-cyan-300 text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                                <div>
+                                    <div class="text-[9px] text-white/40 text-center mb-1">สูง H</div>
+                                    <input type="number" id="dim-h" step="0.1" min="0.1"
+                                        onchange="setDimH(this.value)"
+                                        class="w-full bg-cyan-500/5 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-1 py-1.5 text-cyan-300 text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                                <div>
+                                    <div class="text-[9px] text-white/40 text-center mb-1">ลึก D</div>
+                                    <input type="number" id="dim-d" step="0.1" min="0.1"
+                                        onchange="setDimD(this.value)"
+                                        class="w-full bg-cyan-500/5 border border-cyan-500/25 focus:border-cyan-400 rounded-lg px-1 py-1.5 text-cyan-300 text-[11px] font-mono text-center focus:outline-none transition-all">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ── Divider ── -->
+                        <div class="border-t border-white/8"></div>
+
+                        <!-- ── Color (table / bookshelf / cashier) ── -->
+                        <div id="control-color" class="hidden space-y-1.5">
+                            <p class="section-label">🎨 สีวัตถุ (Color)</p>
+                            <div class="flex items-center space-x-3 bg-white/5 p-2.5 rounded-xl border border-white/5">
+                                <input type="color" id="color-input" oninput="changeSelectedColor(this.value)"
+                                    class="w-8 h-8 border-0 bg-transparent rounded cursor-pointer outline-none">
+                                <span class="text-xs font-mono" id="color-hex">#FFFFFF</span>
+                            </div>
+                        </div>
+
+                        <!-- ── Texture (backdrop / rollup) ── -->
+                        <div id="control-texture" class="hidden space-y-2">
+                            <p class="section-label">🖼️ กราฟิก (Texture)</p>
+                            <div onclick="document.getElementById('image-file-input').click()"
+                                class="border-2 border-dashed border-white/15 rounded-xl p-3 flex flex-col items-center bg-white/5 hover:bg-white/10 hover:border-cyan-500/40 transition-all cursor-pointer">
+                                <svg class="h-6 w-6 text-white/40 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                                <span class="text-[10px] text-white/60">คลิกอัปโหลดรูปภาพ</span>
+                                <input type="file" id="image-file-input" class="hidden" accept="image/*" onchange="uploadTexture(this)">
+                            </div>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <button onclick="applyPresetTexture('sample_naiin')"
+                                    class="bg-cyan-500/10 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/20 text-[10px] rounded-lg py-1.5 transition-all font-medium">
+                                    ลายนายอินทร์
+                                </button>
+                                <button onclick="applyPresetTexture('sample_kids')"
+                                    class="bg-fuchsia-500/10 border border-fuchsia-500/25 text-fuchsia-400 hover:bg-fuchsia-500/20 text-[10px] rounded-lg py-1.5 transition-all font-medium">
+                                    ลายการ์ตูน
+                                </button>
+                            </div>
+                        </div>
+
+                    </div><!-- /scroll -->
+
+                    <!-- Action Buttons -->
+                    <div class="p-3 border-t border-white/10 bg-white/5 flex space-x-2 flex-shrink-0">
+                        <button onclick="duplicateSelected()"
+                            class="flex-1 bg-white/5 hover:bg-white/10 border border-white/15 text-white/70 rounded-xl py-2 text-[11px] font-medium transition-all flex items-center justify-center space-x-1">
+                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                            <span>คัดลอก</span>
+                        </button>
+                        <button onclick="deleteSelectedItem()"
+                            class="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl py-2 text-[11px] font-medium transition-all flex items-center justify-center space-x-1">
+                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            <span>ลบ</span>
+                        </button>
+                    </div>
+                </div><!-- /selected-panel -->
+            </div><!-- /panel-object-mode -->
+        </aside>
+    </div>
+
+    <!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+    <footer class="pointer-events-auto flex items-center justify-between bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-3 flex-shrink-0">
+        <div class="flex items-center space-x-4 text-xs text-white/50">
+            <span class="text-white/70">พื้นที่: <span class="text-cyan-400 font-mono" id="ui-current-dimensions-f">16×3ม.</span></span>
+        </div>
+        <div class="flex space-x-2">
+            <button id="snap-toggle-btn"
+                onclick="window.gridSnapEnabled = !window.gridSnapEnabled; this.textContent = window.gridSnapEnabled ? '⊞ Snap: ON' : '⊟ Snap: OFF'"
+                class="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/30 rounded-xl px-3 py-1.5 text-[11px] font-medium transition-all text-cyan-400/80">
+                ⊞ Snap: ON
+            </button>
+            <button onclick="clearAllWorkspace()"
+                class="bg-white/5 hover:bg-red-500/15 hover:text-red-400 border border-white/10 hover:border-red-500/30 rounded-xl px-3 py-1.5 text-[11px] font-medium transition-all text-white/60">
+                ล้างทั้งหมด
+            </button>
+            <button onclick="captureMockup()"
+                class="bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl px-4 py-1.5 text-[11px] tracking-wider transition-all shadow-[0_0_15px_rgba(6,182,212,0.35)]">
+                📷 Export PNG
             </button>
         </div>
-    </div>
+    </footer>
 
-    <!-- 3D Render Canvas -->
-    <canvas id="canvas3d" class="absolute inset-0 w-full h-full z-0 block outline-none"></canvas>
+</div><!-- /main-ui -->
 
-    <!-- UI Overlay Wrapper (Initially Pointer events disabled and hidden) -->
-    <div id="main-ui" class="hidden absolute inset-0 pointer-events-none z-10 flex flex-col justify-between p-4 md:p-6">
-        
-        <!-- Header -->
-        <header class="w-full flex items-center justify-between pointer-events-auto bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl px-6 py-4 shadow-2xl">
-            <div class="flex items-center space-x-3">
-                <div class="relative w-8 h-8 flex items-center justify-center">
-                    <svg class="w-8 h-8 filter drop-shadow-[0_0_8px_rgba(0,255,244,0.5)]" viewBox="0 0 62 94" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <g style="mix-blend-mode:multiply">
-                            <path d="M59.4 45L30.7 46.8L5.2 91.6L28.2 65.4C36.5 55.9 47.3 48.9 59.4 45Z" fill="#FFFF00"/>
-                            <path d="M2 48.6L30.7 46.8L56.1 2L33.1 28.2C24.8 37.7 14 44.7 2 48.6Z" fill="#FFFF00"/>
-                        </g>
-                        <g style="mix-blend-mode:multiply">
-                            <path d="M60.4 45.5L31.7 47.3L6.2 92.1L29.2 65.9C37.5 56.4 48.3 49.4 60.4 45.5Z" fill="#00FFFF"/>
-                            <path d="M3 49.1L31.7 47.3L57.1 2.5L34.1 28.7C25.8 38.2 15 45.2 3 49.1Z" fill="#00FFFF"/>
-                        </g>
-                    </svg>
-                </div>
-                <div>
-                    <h1 class="text-white font-bold text-lg tracking-wider">EventSpace 3D</h1>
-                    <p class="text-xs text-white/50">Interactive 3D Event Mockup Editor</p>
-                </div>
-            </div>
-            
-            <!-- Controls Guide and Project Status -->
-            <div class="flex items-center space-x-6 text-sm text-white/80">
-                <div class="hidden lg:flex items-center space-x-4 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                    <span class="flex items-center"><kbd class="bg-white/10 px-2 py-0.5 rounded text-xs mr-2 text-cyan-400">Left Click</kbd> หมุนกล้อง/ระบายสี</span>
-                    <span class="flex items-center"><kbd class="bg-white/10 px-2 py-0.5 rounded text-xs mr-2 text-cyan-400">Right Click</kbd> เลื่อนแกนกล้อง</span>
-                    <span class="flex items-center"><kbd class="bg-white/10 px-2 py-0.5 rounded text-xs mr-2 text-cyan-400">Drag Obj</kbd> ย้ายของ</span>
-                </div>
-                <div class="text-right">
-                    <span class="text-xs text-white/40 block">ขนาดพื้นที่ติดตั้ง</span>
-                    <span class="text-sm font-semibold text-cyan-400" id="ui-current-dimensions">16.00 x 3.00 เมตร</span>
-                </div>
-            </div>
-        </header>
-
-        <!-- Main Workspace -->
-        <div class="flex-1 flex justify-between my-4 relative items-stretch">
-            
-            <!-- Left Panel: Spawn Assets List -->
-            <aside class="w-80 pointer-events-auto bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex flex-col overflow-hidden shadow-2xl">
-                <div class="p-5 border-b border-white/10">
-                    <h2 class="text-white font-semibold text-md">คลังอุปกรณ์ (Assets)</h2>
-                    <p class="text-xs text-white/50">คลิกเพื่อวางวัตถุลงบนแผ่นพื้นที่ระบุ</p>
-                </div>
-                
-                <div class="flex-1 overflow-y-auto p-4 space-y-4">
-                    <!-- Spawner Button: Backdrop -->
-                    <button onclick="spawnItem('backdrop')" class="w-full flex items-center p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all group text-left">
-                        <div class="w-12 h-12 bg-cyan-500/10 rounded-lg flex items-center justify-center text-cyan-400 font-semibold group-hover:scale-105 transition-transform">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v12a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <span class="text-white font-medium block text-sm">ผนังแบคดรอป (Backdrop)</span>
-                            <span class="text-xs text-white/40">ขยายสัดส่วนตามความกว้างพื้นที่</span>
-                        </div>
-                    </button>
-
-                    <!-- Spawner Button: Table -->
-                    <button onclick="spawnItem('table')" class="w-full flex items-center p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all group text-left">
-                        <div class="w-12 h-12 bg-cyan-500/10 rounded-lg flex items-center justify-center text-cyan-400 font-semibold group-hover:scale-105 transition-transform">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M6 14h12m-9 4h6m-12-8V6a2 2 0 012-2h12a2 2 0 012 2v4" />
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <span class="text-white font-medium block text-sm">โต๊ะคลุมผ้า (Exhibition Table)</span>
-                            <span class="text-xs text-white/40">ขนาด: 1.50m x 0.75m</span>
-                        </div>
-                    </button>
-
-                    <!-- Spawner Button: Bookshelf -->
-                    <button onclick="spawnItem('bookshelf')" class="w-full flex items-center p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all group text-left">
-                        <div class="w-12 h-12 bg-cyan-500/10 rounded-lg flex items-center justify-center text-cyan-400 font-semibold group-hover:scale-105 transition-transform">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <span class="text-white font-medium block text-sm">ชั้นขั้นบันไดโชว์ของ</span>
-                            <span class="text-xs text-white/40">ขนาด: 1.40m x 1.00m</span>
-                        </div>
-                    </button>
-
-                    <!-- Spawner Button: Cashier Desk -->
-                    <button onclick="spawnItem('cashier')" class="w-full flex items-center p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all group text-left">
-                        <div class="w-12 h-12 bg-cyan-500/10 rounded-lg flex items-center justify-center text-cyan-400 font-semibold group-hover:scale-105 transition-transform">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <span class="text-white font-medium block text-sm">ซุ้มคิดเงิน (Cashier Counter)</span>
-                            <span class="text-xs text-white/40">ขนาด: 1.00m x 0.80m</span>
-                        </div>
-                    </button>
-
-                    <!-- Spawner Button: Rollup Banner -->
-                    <button onclick="spawnItem('rollup')" class="w-full flex items-center p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all group text-left">
-                        <div class="w-12 h-12 bg-cyan-500/10 rounded-lg flex items-center justify-center text-cyan-400 font-semibold group-hover:scale-105 transition-transform">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                        </div>
-                        <div class="ml-3">
-                            <span class="text-white font-medium block text-sm">ป้ายโรลอัป (Rollup Banner)</span>
-                            <span class="text-xs text-white/40">ขนาด: 0.80m x 2.00m</span>
-                        </div>
-                    </button>
-                </div>
-
-                <!-- Footer panel camera angles -->
-                <div class="p-4 bg-white/5 border-t border-white/10 flex flex-col space-y-2">
-                    <span class="text-xs text-white/40 block">ปรับเปลี่ยนมุมกล้อง:</span>
-                    <div class="flex space-x-2">
-                        <button onclick="setCameraAngle('top')" class="flex-1 bg-white/5 border border-white/10 text-white rounded-lg py-1.5 text-xs hover:bg-white/10 hover:border-cyan-400 transition-all font-medium">แปลน 2D</button>
-                        <button onclick="setCameraAngle('isometric_left')" class="flex-1 bg-white/5 border border-white/10 text-white rounded-lg py-1.5 text-xs hover:bg-white/10 hover:border-cyan-400 transition-all font-medium">มุมซ้าย</button>
-                        <button onclick="setCameraAngle('isometric_right')" class="flex-1 bg-white/5 border border-white/10 text-white rounded-lg py-1.5 text-xs hover:bg-white/10 hover:border-cyan-400 transition-all font-medium">มุมขวา</button>
-                    </div>
-                </div>
-            </aside>
-            
-            <!-- Right Panel: Toolbox (Color Carpet + Item customization) -->
-            <aside class="w-80 pointer-events-auto bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex flex-col overflow-hidden shadow-2xl">
-                
-                <!-- Tool Selector Tabs (Carpet Paint vs Edit Objects) -->
-                <div class="grid grid-cols-2 border-b border-white/10">
-                    <button id="tab-objects" onclick="setMode('objects')" class="py-4 text-xs font-semibold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all">
-                        🪑 จัดของ
-                    </button>
-                    <button id="tab-paint" onclick="setMode('paint')" class="py-4 text-xs font-semibold uppercase tracking-wider text-white/50 hover:text-white transition-all">
-                        🎨 ระบายสีพรม
-                    </button>
-                </div>
-
-                <!-- PANEL A: Carpet Paint Mode Controls -->
-                <div id="panel-paint-mode" class="hidden flex-1 flex flex-col p-5 space-y-6">
-                    <div>
-                        <h3 class="text-white font-semibold text-sm">เครื่องมือระบายสีพรม</h3>
-                        <p class="text-xs text-white/40 mt-1">เลือกสีด้านล่าง แล้วคลิกที่ช่องพื้นตารางในพื้นที่งาน 3D เพื่อเทสีลงพรม</p>
-                    </div>
-
-                    <!-- Carpet Color Swatches -->
-                    <div class="space-y-3">
-                        <label class="text-xs text-white/50 block font-medium uppercase tracking-wider">สีระบายพรมพรีเซ็ต</label>
-                        <div class="grid grid-cols-4 gap-2">
-                            <button onclick="selectCarpetBrush('#374151')" class="w-full h-10 rounded-lg border-2 border-white/10 bg-[#374151] hover:scale-105 transition-all" title="เทาเข้ม"></button>
-                            <button onclick="selectCarpetBrush('#1e3a8a')" class="w-full h-10 rounded-lg border-2 border-transparent bg-[#1e3a8a] hover:scale-105 transition-all" title="น้ำเงินกรม"></button>
-                            <button onclick="selectCarpetBrush('#ef4444')" class="w-full h-10 rounded-lg border-2 border-transparent bg-[#ef4444] hover:scale-105 transition-all" title="แดงสด"></button>
-                            <button onclick="selectCarpetBrush('#15803d')" class="w-full h-10 rounded-lg border-2 border-transparent bg-[#15803d] hover:scale-105 transition-all" title="เขียวป่า"></button>
-                            <button onclick="selectCarpetBrush('#d97706')" class="w-full h-10 rounded-lg border-2 border-transparent bg-[#d97706] hover:scale-105 transition-all" title="เหลืองทอง"></button>
-                            <button onclick="selectCarpetBrush('#7e22ce')" class="w-full h-10 rounded-lg border-2 border-transparent bg-[#7e22ce] hover:scale-105 transition-all" title="ม่วงเข้ม"></button>
-                            <button onclick="selectCarpetBrush('#f43f5e')" class="w-full h-10 rounded-lg border-2 border-transparent bg-[#f43f5e] hover:scale-105 transition-all" title="ชมพู"></button>
-                            <button onclick="selectCarpetBrush('#ffffff')" class="w-full h-10 rounded-lg border-2 border-transparent bg-[#ffffff] hover:scale-105 transition-all" title="ขาวครีม"></button>
-                        </div>
-                    </div>
-
-                    <!-- Custom Carpet Brush Color -->
-                    <div class="space-y-2">
-                        <label class="text-xs text-white/50 block font-medium uppercase tracking-wider">เลือกสีพรมกำหนดเอง</label>
-                        <div class="flex items-center space-x-3 bg-white/5 p-3 rounded-xl border border-white/5">
-                            <input type="color" id="carpet-brush-color-picker" oninput="selectCarpetBrush(this.value)" value="#374151" class="w-10 h-10 border-0 bg-transparent rounded-lg cursor-pointer outline-none block">
-                            <span class="text-sm font-medium" id="carpet-brush-hex">#374151 (Active)</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- PANEL B: Object Mode Controls -->
-                <div id="panel-object-mode" class="flex-1 flex flex-col">
-                    <!-- Unselected State -->
-                    <div id="unselected-panel" class="flex-1 flex flex-col justify-center items-center p-6 text-center">
-                        <div class="w-16 h-16 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-white/30 mb-4 animate-pulse">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                            </svg>
-                        </div>
-                        <h3 class="text-white font-medium text-sm mb-1">ยังไม่มีอุปกรณ์ที่เลือก</h3>
-                        <p class="text-xs text-white/40 px-4">คลิกเลือกวัตถุ 3D ในฉากเพื่อปรับแต่งลวดลาย ลบชิ้นงาน หรือสลับเป็นโหมดสีพรมที่แถบด้านบน</p>
-                    </div>
-
-                    <!-- Selected State (Hidden initially) -->
-                    <div id="selected-panel" class="hidden flex-1 flex flex-col">
-                        <div class="p-5 border-b border-white/10">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <h2 class="text-white font-semibold text-md" id="selected-title">แผงควบคุมอุปกรณ์</h2>
-                                    <p class="text-xs text-white/50" id="selected-subtitle">ปรับแต่งรายละเอียดสินค้า</p>
-                                </div>
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-400/10 text-cyan-400 border border-cyan-400/20" id="selected-badge">TABLE</span>
-                            </div>
-                        </div>
-
-                        <!-- Scrollable Object Customizer Options -->
-                        <div class="flex-1 overflow-y-auto p-5 space-y-6">
-                            
-                            <!-- Position Display -->
-                            <div class="space-y-1">
-                                <label class="text-xs text-white/50 block font-medium uppercase tracking-wider">ตำแหน่ง (Position)</label>
-                                <div class="flex items-center justify-between bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                                    <span class="text-xs text-white/40">📍</span>
-                                    <span class="text-sm font-mono text-cyan-300" id="position-display">X: 0.0m  Z: 0.0m</span>
-                                </div>
-                            </div>
-
-                            <!-- Rotation Slider -->
-                            <div class="space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <label class="text-xs text-white/50 block font-medium uppercase tracking-wider">หมุน Y-Axis (Rotation)</label>
-                                    <span class="text-xs font-mono text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded" id="rotation-label">0°</span>
-                                </div>
-                                <div class="relative">
-                                    <input type="range" id="rotation-slider" min="0" max="360" value="0" step="5"
-                                        oninput="applyRotation(this.value)"
-                                        class="w-full h-2 rounded-full appearance-none cursor-pointer bg-white/10 accent-cyan-400">
-                                </div>
-                                <div class="flex space-x-2 mt-1">
-                                    <button onclick="applyRotation(0)" class="flex-1 bg-white/5 border border-white/10 text-white/60 rounded-lg py-1 text-[10px] hover:bg-white/10 transition-all">0°</button>
-                                    <button onclick="applyRotation(45)" class="flex-1 bg-white/5 border border-white/10 text-white/60 rounded-lg py-1 text-[10px] hover:bg-white/10 transition-all">45°</button>
-                                    <button onclick="applyRotation(90)" class="flex-1 bg-white/5 border border-white/10 text-white/60 rounded-lg py-1 text-[10px] hover:bg-white/10 transition-all">90°</button>
-                                    <button onclick="applyRotation(180)" class="flex-1 bg-white/5 border border-white/10 text-white/60 rounded-lg py-1 text-[10px] hover:bg-white/10 transition-all">180°</button>
-                                </div>
-                            </div>
-
-                            <!-- Control: Object Color Picker (table, bookshelf, cashier) -->
-                            <div id="control-color" class="space-y-2">
-                                <label class="text-xs text-white/50 block font-medium uppercase tracking-wider">สี (Object Color)</label>
-                                <div class="flex items-center space-x-3 bg-white/5 p-3 rounded-xl border border-white/5">
-                                    <input type="color" id="color-input" oninput="changeSelectedColor(this.value)" class="w-10 h-10 border-0 bg-transparent rounded-lg cursor-pointer outline-none block">
-                                    <span class="text-sm font-medium" id="color-hex">#ffffff</span>
-                                </div>
-                            </div>
-
-                            <!-- Control: Texture Image Upload -->
-                            <div id="control-texture" class="space-y-3">
-                                <label class="text-xs text-white/50 block font-medium uppercase tracking-wider">อัปโหลดลายกราฟิก (Upload Design)</label>
-                                <div class="border-2 border-dashed border-white/15 rounded-xl p-4 flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 hover:border-cyan-500/50 transition-all cursor-pointer relative" onclick="document.getElementById('image-file-input').click()">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white/40 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                    <span class="text-xs font-medium text-white/80">คลิกเลือกรูปภาพแบนเนอร์</span>
-                                    <input type="file" id="image-file-input" class="hidden" accept="image/png, image/jpeg, image/jpg" onchange="uploadTexture(this)">
-                                </div>
-                                
-                                <!-- Preset Texture Options -->
-                                <div class="space-y-1.5">
-                                    <span class="text-[10px] text-white/40 block font-medium uppercase tracking-wider">ลายตัวอย่างด่วน (Quick Presets)</span>
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <button onclick="applyPresetTexture('sample_naiin')" class="bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20 text-xs rounded-lg py-1.5 transition-all font-medium">ลายร้านนายอินทร์</button>
-                                        <button onclick="applyPresetTexture('sample_kids')" class="bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-400 hover:bg-fuchsia-500/20 text-xs rounded-lg py-1.5 transition-all font-medium">ลายการ์ตูนเด็ก</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Action Buttons -->
-                        <div class="p-4 border-t border-white/10 bg-white/5 flex space-x-3">
-                            <button onclick="duplicateSelected()" class="flex-1 bg-white/5 hover:bg-white/10 border border-white/15 hover:border-white/30 text-white/70 rounded-xl py-3 text-xs font-semibold tracking-wider transition-all flex items-center justify-center space-x-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                                <span>คัดลอก</span>
-                            </button>
-                            <button onclick="deleteSelectedItem()" class="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 text-red-400 rounded-xl py-3 text-xs font-semibold tracking-wider transition-all flex items-center justify-center space-x-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                <span>ลบ</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </aside>
-
-        </div>
-        
-        <!-- Bottom control bar -->
-        <footer class="w-full flex items-center justify-between pointer-events-auto bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl px-6 py-4 mt-auto">
-            <div class="flex items-center space-x-6 text-xs text-white/50">
-                <div>
-                    <span class="text-white font-medium">พื้นที่ใช้งานจริง (Floor Tiles):</span>
-                    <span class="ml-2 font-mono text-cyan-400" id="ui-tile-count">0 แผ่น (1m x 1m)</span>
-                </div>
-                <div class="hidden sm:block">
-                    <span class="text-white font-medium">Keyboard:</span>
-                    <span class="ml-2 text-white/60">Del=ลบ · R=หมุน45° · Esc=ยกเลิก · G=Snap · Ctrl+D=คัดลอก</span>
-                </div>
-            </div>
-            
-            <div class="flex space-x-3">
-                <button id="snap-toggle-btn" onclick="window.gridSnapEnabled = !window.gridSnapEnabled; this.textContent = window.gridSnapEnabled ? '⊞ Snap: ON' : '⊟ Snap: OFF'" class="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/30 rounded-xl px-4 py-2 text-xs font-medium transition-all text-cyan-400/80">⊞ Snap: ON</button>
-                <button onclick="clearAllWorkspace()" class="bg-white/5 hover:bg-red-500/15 hover:text-red-400 border border-white/10 hover:border-red-500/35 rounded-xl px-4 py-2 text-xs font-medium transition-all text-white/70">ล้างกระดานวาด</button>
-                <button onclick="captureMockup()" class="bg-cyan-500 hover:bg-cyan-400 text-black font-semibold rounded-xl px-5 py-2 text-xs tracking-wider transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)]">บันทึกรูป Mockup</button>
-            </div>
-        </footer>
-
-    </div>
-
-    <!-- Main javascript file -->
 </body>
 </html>
