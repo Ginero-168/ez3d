@@ -5,9 +5,11 @@ let draggableObjects = [];
 let floorTiles = []; // Individual carpet tile meshes
 let selectedObject = null;
 let isDragging = false;
+let didDrag = false; // Track if pointer actually moved (to separate click vs drag)
 let plane; // Plane for raycaster tracking
 let raycaster = new THREE.Raycaster();
 let mouse = new THREE.Vector2();
+let pointerDownMouse = new THREE.Vector2(); // Record where pointer went down
 let dragOffset = new THREE.Vector3();
 
 // State variables
@@ -16,6 +18,7 @@ let activeCarpetBrushColor = '#374151'; // Active brush color for floor painting
 let spaceWidth = 16;
 let spaceLength = 3;
 let gridSnapSize = 0.5; // Grid snap interval in meters
+let gridSnapEnabled = true; // Toggle grid snapping
 
 // Procedural texture presets
 const texturePresets = {
@@ -135,6 +138,7 @@ function init3D(W, L) {
     renderer.domElement.addEventListener('pointerdown', onPointerDown, false);
     renderer.domElement.addEventListener('pointermove', onPointerMove, false);
     renderer.domElement.addEventListener('pointerup', onPointerUp, false);
+    window.addEventListener('keydown', onKeyDown, false);
 
     animate();
 }
@@ -353,6 +357,8 @@ function onPointerDown(event) {
 
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    pointerDownMouse.copy(mouse);
+    didDrag = false;
 
     raycaster.setFromCamera(mouse, camera);
 
@@ -360,35 +366,31 @@ function onPointerDown(event) {
         // --- PAINT MODE: Click to paint carpet tiles ---
         const intersects = raycaster.intersectObjects(floorTiles);
         if (intersects.length > 0) {
-            const clickedTile = intersects[0].object;
-            clickedTile.material.color.set(activeCarpetBrushColor);
-            
-            // Adjust glowing look based on darkness/brightness of custom color
-            if (activeCarpetBrushColor === '#ffffff') {
-                clickedTile.material.emissive.set('#444444');
-            } else {
-                clickedTile.material.emissive.set(activeCarpetBrushColor);
-            }
+            paintTile(intersects[0].object);
         }
     } else {
         // --- OBJECT EDIT MODE: Select & Move 3D items ---
+        // FIX #1: Test hit FIRST before OrbitControls gets the event
         const intersects = raycaster.intersectObjects(draggableObjects, true);
 
         if (intersects.length > 0) {
+            // FIX #2: Correct group traversal — find the root object in draggableObjects
             let target = intersects[0].object;
-            while (target.parent && target.parent !== scene) {
+            // Walk up the parent chain until we find an object registered in draggableObjects
+            while (target && !draggableObjects.includes(target)) {
                 target = target.parent;
             }
 
-            selectObject(target);
-            
-            isDragging = true;
-            controls.enabled = false; // Disable orbit control rotation
+            if (target) {
+                selectObject(target);
+                isDragging = true;
+                controls.enabled = false; // Disable orbit so drag works correctly
 
-            const intersectPlane = raycaster.intersectObject(plane);
-            if (intersectPlane.length > 0) {
-                dragOffset.copy(target.position).sub(intersectPlane[0].point);
-                dragOffset.y = 0;
+                const intersectPlane = raycaster.intersectObject(plane);
+                if (intersectPlane.length > 0) {
+                    dragOffset.copy(target.position).sub(intersectPlane[0].point);
+                    dragOffset.y = 0;
+                }
             }
         } else {
             deselectObject();
@@ -397,35 +399,103 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
-    if (!isDragging || !selectedObject || currentMode !== 'objects') return;
-
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    // Paint mode — drag-paint across tiles
+    if (currentMode === 'paint' && event.buttons === 1) {
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(floorTiles);
+        if (intersects.length > 0) {
+            paintTile(intersects[0].object);
+        }
+        return;
+    }
+
+    if (!isDragging || !selectedObject || currentMode !== 'objects') return;
+
+    // Mark that actual dragging occurred (to distinguish from click)
+    const dx = mouse.x - pointerDownMouse.x;
+    const dz = mouse.y - pointerDownMouse.y;
+    if (Math.abs(dx) > 0.005 || Math.abs(dz) > 0.005) didDrag = true;
 
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObject(plane);
 
     if (intersects.length > 0) {
         const newPos = intersects[0].point.clone().add(dragOffset);
-        
-        // Snapping alignment
-        newPos.x = Math.round(newPos.x / gridSnapSize) * gridSnapSize;
-        newPos.z = Math.round(newPos.z / gridSnapSize) * gridSnapSize;
 
-        // Dynamic boundaries constraint matching W x L dimensions
-        const xLimit = spaceWidth / 2;
-        const zLimit = spaceLength / 2;
+        if (gridSnapEnabled) {
+            newPos.x = Math.round(newPos.x / gridSnapSize) * gridSnapSize;
+            newPos.z = Math.round(newPos.z / gridSnapSize) * gridSnapSize;
+        }
+
+        // FIX #2b: Use correct W/2 and L/2 boundaries from actual space dimensions
+        const xLimit = spaceWidth / 2 + 1.5; // Allow slight overflow for edge placement
+        const zLimit = spaceLength / 2 + 1.5;
         newPos.x = Math.max(-xLimit, Math.min(xLimit, newPos.x));
         newPos.z = Math.max(-zLimit, Math.min(zLimit, newPos.z));
 
         selectedObject.position.x = newPos.x;
         selectedObject.position.z = newPos.z;
+
+        // Update position display in UI
+        updatePositionDisplay();
     }
 }
 
 function onPointerUp() {
     isDragging = false;
     controls.enabled = true;
+    didDrag = false;
+}
+
+// Paint a single floor tile with active brush color
+function paintTile(tile) {
+    tile.material.color.set(activeCarpetBrushColor);
+    if (activeCarpetBrushColor === '#ffffff') {
+        tile.material.emissive.set('#444444');
+        tile.material.emissiveIntensity = 0.3;
+    } else {
+        tile.material.emissive.set(activeCarpetBrushColor);
+        tile.material.emissiveIntensity = 0.25;
+    }
+}
+
+// Keyboard shortcut handler
+function onKeyDown(event) {
+    // Don't fire when user is typing in an input
+    if (event.target.tagName === 'INPUT') return;
+
+    switch (event.key) {
+        case 'Delete':
+        case 'Backspace':
+            deleteSelectedItem();
+            break;
+        case 'Escape':
+            deselectObject();
+            break;
+        case 'r':
+        case 'R':
+            if (selectedObject) {
+                selectedObject.rotation.y += Math.PI / 4; // Rotate 45°
+                syncRotationSlider();
+            }
+            break;
+        case 'g':
+        case 'G':
+            gridSnapEnabled = !gridSnapEnabled;
+            const snapBtn = document.getElementById('snap-toggle-btn');
+            if (snapBtn) snapBtn.textContent = gridSnapEnabled ? '⊞ Snap: ON' : '⊟ Snap: OFF';
+            break;
+        case 'd':
+        case 'D':
+            if (event.ctrlKey || event.metaKey) {
+                event.preventDefault();
+                duplicateSelected();
+            }
+            break;
+    }
 }
 
 // Mode setting controller
@@ -465,6 +535,7 @@ function selectCarpetBrush(color) {
 
 // Selects an object and highlights it visually
 function selectObject(object) {
+    if (selectedObject === object) return; // Already selected
     if (selectedObject) deselectObject();
 
     selectedObject = object;
@@ -481,9 +552,27 @@ function deselectObject() {
     if (selectedObject && selectedObject.userData.outlineHelper) {
         scene.remove(selectedObject.userData.outlineHelper);
         selectedObject.userData.outlineHelper.dispose();
+        delete selectedObject.userData.outlineHelper;
     }
     selectedObject = null;
     updateUI();
+}
+
+// Duplicate the currently selected object
+function duplicateSelected() {
+    if (!selectedObject) return;
+    const type = selectedObject.userData.type;
+    if (!type) return;
+    const newObj = spawnItem(type, false);
+    if (newObj) {
+        newObj.position.set(
+            selectedObject.position.x + 1,
+            selectedObject.position.y,
+            selectedObject.position.z + 1
+        );
+        newObj.rotation.y = selectedObject.rotation.y;
+        selectObject(newObj);
+    }
 }
 
 // Deletes the selected object
@@ -532,16 +621,38 @@ function clearAllWorkspace() {
     draggableObjects = [];
 }
 
-// Change colors of selected table cloths
+// Change colors of selected object (table, bookshelf, cashier)
 function changeSelectedColor(hexColor) {
     if (!selectedObject) return;
 
     document.getElementById('color-hex').innerText = hexColor;
     const targetMesh = selectedObject.userData.targetColorMesh || selectedObject;
-    
-    if (targetMesh.material) {
+
+    // Handle direct mesh with single material
+    if (targetMesh.material && !Array.isArray(targetMesh.material)) {
         targetMesh.material.color.set(hexColor);
+        return;
     }
+
+    // Handle Group — color ALL child meshes that have non-array material
+    if (targetMesh.isGroup || !targetMesh.material) {
+        targetMesh.traverse((child) => {
+            if (child.isMesh && child.material && !Array.isArray(child.material)) {
+                // Skip metallic parts (monitor, stand)
+                if (child.material.metalness < 0.5) {
+                    child.material.color.set(hexColor);
+                }
+            }
+        });
+    }
+}
+
+// Apply rotation from Y-axis slider
+function applyRotation(degrees) {
+    if (!selectedObject) return;
+    selectedObject.rotation.y = THREE.MathUtils.degToRad(parseFloat(degrees));
+    const label = document.getElementById('rotation-label');
+    if (label) label.innerText = Math.round(degrees) + '°';
 }
 
 // Custom texture uploading
@@ -595,34 +706,73 @@ function updateUI() {
     if (!selectedObject) {
         unselected.classList.remove('hidden');
         selected.classList.add('hidden');
-    } else {
-        unselected.classList.add('hidden');
-        selected.classList.remove('hidden');
-
-        const type = selectedObject.userData.type;
-        const titleEl = document.getElementById('selected-title');
-        const badgeEl = document.getElementById('selected-badge');
-        
-        titleEl.innerText = selectedObject.name;
-        badgeEl.innerText = type.toUpperCase();
-
-        const colorCtrl = document.getElementById('control-color');
-        const textureCtrl = document.getElementById('control-texture');
-
-        if (type === 'table') {
-            colorCtrl.classList.remove('hidden');
-            textureCtrl.classList.add('hidden');
-            const activeColor = selectedObject.userData.targetColorMesh.material.color.getHexString();
-            document.getElementById('color-input').value = '#' + activeColor;
-            document.getElementById('color-hex').innerText = '#' + activeColor;
-        } else if (type === 'backdrop' || type === 'rollup') {
-            colorCtrl.classList.add('hidden');
-            textureCtrl.classList.remove('hidden');
-        } else {
-            colorCtrl.classList.add('hidden');
-            textureCtrl.classList.add('hidden');
-        }
+        return;
     }
+
+    unselected.classList.add('hidden');
+    selected.classList.remove('hidden');
+
+    const type = selectedObject.userData.type;
+    const titleEl = document.getElementById('selected-title');
+    const badgeEl = document.getElementById('selected-badge');
+
+    titleEl.innerText = selectedObject.name;
+    badgeEl.innerText = type.toUpperCase();
+
+    // FIX #3: Show correct controls for every object type
+    const colorCtrl = document.getElementById('control-color');
+    const textureCtrl = document.getElementById('control-texture');
+
+    // Types that support cloth/body color
+    const colorTypes = ['table', 'bookshelf', 'cashier'];
+    // Types that support texture/banner upload
+    const textureTypes = ['backdrop', 'rollup'];
+
+    if (colorTypes.includes(type)) {
+        colorCtrl.classList.remove('hidden');
+        textureCtrl.classList.add('hidden');
+        // Get color from targetColorMesh if present, otherwise from object itself
+        const colorSource = selectedObject.userData.targetColorMesh || selectedObject;
+        let hexColor = 'ffffff';
+        if (colorSource.material && !Array.isArray(colorSource.material)) {
+            hexColor = colorSource.material.color.getHexString();
+        } else if (Array.isArray(colorSource.material) && colorSource.material[0]) {
+            hexColor = colorSource.material[0].color.getHexString();
+        }
+        document.getElementById('color-input').value = '#' + hexColor;
+        document.getElementById('color-hex').innerText = '#' + hexColor;
+    } else if (textureTypes.includes(type)) {
+        colorCtrl.classList.add('hidden');
+        textureCtrl.classList.remove('hidden');
+    } else {
+        colorCtrl.classList.add('hidden');
+        textureCtrl.classList.add('hidden');
+    }
+
+    // Update rotation slider
+    syncRotationSlider();
+    // Update position display
+    updatePositionDisplay();
+}
+
+// Sync rotation slider to current selected object's Y rotation
+function syncRotationSlider() {
+    const slider = document.getElementById('rotation-slider');
+    const label = document.getElementById('rotation-label');
+    if (!slider || !selectedObject) return;
+    const deg = THREE.MathUtils.radToDeg(selectedObject.rotation.y) % 360;
+    const normalized = ((deg % 360) + 360) % 360;
+    slider.value = Math.round(normalized);
+    if (label) label.innerText = Math.round(normalized) + '°';
+}
+
+// Update position display label
+function updatePositionDisplay() {
+    const posEl = document.getElementById('position-display');
+    if (!posEl || !selectedObject) return;
+    const x = selectedObject.position.x.toFixed(1);
+    const z = selectedObject.position.z.toFixed(1);
+    posEl.innerText = `X: ${x}m  Z: ${z}m`;
 }
 
 // Reset camera view angles based on dynamic dimensions to frame the grid
@@ -808,3 +958,5 @@ window.uploadTexture = uploadTexture;
 window.applyPresetTexture = applyPresetTexture;
 window.setCameraAngle = setCameraAngle;
 window.captureMockup = captureMockup;
+window.applyRotation = applyRotation;
+window.duplicateSelected = duplicateSelected;
