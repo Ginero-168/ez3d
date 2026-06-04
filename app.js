@@ -3045,6 +3045,57 @@ function toggleTurboMode() {
     }
 }
 
+function _vectorSnapshot(v) {
+    return { x: v.x, y: v.y, z: v.z };
+}
+
+function _debugObjectSnapshot(obj) {
+    const center = _getSelectionCenter([obj]);
+    return {
+        name: obj.name,
+        type: obj.userData?.type || null,
+        position: _vectorSnapshot(obj.position),
+        rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+        scale: _vectorSnapshot(obj.scale),
+        center: _vectorSnapshot(center),
+    };
+}
+
+function _installDebugHooks() {
+    const host = window.location.hostname;
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '';
+    if (!isLocal) return;
+
+    window.__ez3dDebug = {
+        getState() {
+            const selectionCenter = selectedObjects.length ? _getSelectionCenter() : null;
+            return {
+                objects: draggableObjects.map(_debugObjectSnapshot),
+                selectedNames: selectedObjects.map(obj => obj.name),
+                selectedObjectName: selectedObject?.name || null,
+                selectedCount: selectedObjects.length,
+                selectionCenter: selectionCenter ? _vectorSnapshot(selectionCenter) : null,
+                anchor: selectionAnchor ? {
+                    position: _vectorSnapshot(selectionAnchor.position),
+                    rotation: { x: selectionAnchor.rotation.x, y: selectionAnchor.rotation.y, z: selectionAnchor.rotation.z },
+                    scale: _vectorSnapshot(selectionAnchor.scale),
+                } : null,
+                transformMode: transformControls?.mode || null,
+            };
+        },
+        selectByName(names) {
+            const list = Array.isArray(names) ? names : [names];
+            const targets = list
+                .map(name => draggableObjects.find(obj => obj.name === name))
+                .filter(Boolean);
+            if (targets.length === 0) return false;
+            selectObject(targets[0]);
+            targets.slice(1).forEach(obj => selectObject(obj, true));
+            return targets.length === list.length;
+        },
+    };
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // RENDER LOOP
 // ══════════════════════════════════════════════════════════════════════════
@@ -3125,3 +3176,4 @@ _g.focusCameraOnPin    = focusCameraOnPin;
 _g.toggleTurboMode     = toggleTurboMode;
 _g.beginLightUndo      = beginLightUndo;
 _g.commitLightUndo     = commitLightUndo;
+_installDebugHooks();

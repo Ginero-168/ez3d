@@ -4,6 +4,16 @@ import { chromium } from 'playwright';
 
 const PORT = 5173;
 const URL = `http://127.0.0.1:${PORT}/`;
+const EPSILON = 0.01;
+
+function assertNearVector(actual, expected, label) {
+  for (const axis of ['x', 'y', 'z']) {
+    const delta = Math.abs(actual[axis] - expected[axis]);
+    if (delta > EPSILON) {
+      throw new Error(`${label}.${axis} expected ${expected[axis].toFixed(3)}, got ${actual[axis].toFixed(3)}.`);
+    }
+  }
+}
 
 function startServer() {
   const child = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'], {
@@ -65,6 +75,58 @@ async function run() {
     await page.waitForTimeout(100);
     const selectedTitle = await page.locator('#selected-title').innerText();
     if (!selectedTitle.includes('โต๊ะ')) throw new Error(`Canvas click did not select table; selected ${selectedTitle}.`);
+
+    const singleTransformState = await page.evaluate(() => {
+      window.applyRotation(35);
+      const state = window.__ez3dDebug.getState();
+      const selected = state.objects.find(obj => obj.name === state.selectedNames[0]);
+      return { state, selected };
+    });
+    if (!singleTransformState.state.anchor) throw new Error('Selection anchor was not created for selected table.');
+    assertNearVector(
+      singleTransformState.state.anchor.position,
+      singleTransformState.selected.center,
+      'Single selection anchor'
+    );
+
+    await page.keyboard.press(platform() === 'darwin' ? 'Meta+Z' : 'Control+Z');
+    await page.waitForTimeout(100);
+    const singleUndoState = await page.evaluate(() => {
+      const state = window.__ez3dDebug.getState();
+      const selected = state.objects.find(obj => obj.name === state.selectedNames[0]);
+      return { state, selected };
+    });
+    assertNearVector(singleUndoState.state.anchor.position, singleUndoState.selected.center, 'Single undo anchor');
+
+    await page.locator('#tab-btn-objects').click();
+    await page.locator("button[onclick=\"spawnItem('cashier')\"]").click();
+    const multiTransformState = await page.evaluate(() => {
+      const stateBefore = window.__ez3dDebug.getState();
+      const table = stateBefore.objects.find(obj => obj.type === 'table');
+      const cashier = stateBefore.objects.find(obj => obj.type === 'cashier');
+      if (!table || !cashier) throw new Error('Missing table or cashier for multi-select transform test.');
+      if (!window.__ez3dDebug.selectByName([table.name, cashier.name])) throw new Error('Debug multi-select failed.');
+      window.setRotationY(30);
+      const state = window.__ez3dDebug.getState();
+      return {
+        state,
+        selected: state.selectedNames.map(name => state.objects.find(obj => obj.name === name)),
+      };
+    });
+    if (multiTransformState.state.selectedCount !== 2) {
+      throw new Error(`Expected 2 selected objects after multi-select; got ${multiTransformState.state.selectedCount}.`);
+    }
+    if (!multiTransformState.state.anchor) throw new Error('Selection anchor was not created for multi-select.');
+    assertNearVector(
+      multiTransformState.state.anchor.position,
+      multiTransformState.state.selectionCenter,
+      'Multi selection anchor'
+    );
+
+    await page.keyboard.press(platform() === 'darwin' ? 'Meta+Z' : 'Control+Z');
+    await page.waitForTimeout(100);
+    const multiUndoState = await page.evaluate(() => window.__ez3dDebug.getState());
+    assertNearVector(multiUndoState.anchor.position, multiUndoState.selectionCenter, 'Multi undo anchor');
 
     await page.locator('#snap-toggle-btn').click();
     const snapText = await page.locator('#snap-toggle-text').innerText();
