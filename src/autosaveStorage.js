@@ -1,3 +1,5 @@
+import { isProjectSnapshot } from './projectSnapshot.js';
+
 export const AUTOSAVE_KEY = 'ez3d.autosave.v1';
 
 export function readAutosaveDraft(storage = localStorage) {
@@ -5,7 +7,7 @@ export function readAutosaveDraft(storage = localStorage) {
     const raw = storage.getItem(AUTOSAVE_KEY);
     if (!raw) return null;
     const snapshot = JSON.parse(raw);
-    return snapshot?.schema === 'ez3d.project' ? snapshot : null;
+    return isProjectSnapshot(snapshot) ? snapshot : null;
   } catch (err) {
     console.warn('Ez3d autosave read failed:', err);
     return null;

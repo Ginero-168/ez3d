@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
+import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, isProjectSnapshot } from './src/projectSnapshot.js';
 import './styles.css';
 
 // Ez3d — Exhibition Space 3D Mockup Studio
@@ -2310,10 +2311,15 @@ function _serializePin(pin) {
 }
 
 function createProjectSnapshot() {
+    const objects = draggableObjects.map(_serializeObject).filter(Boolean);
+    const lights = sceneLights.map(_serializeLight);
+    const carpet = floorTiles.map(t => t.color);
+    const comments = commentPins.filter(p => !p.isEditing).map(_serializePin);
     return {
-        schema: 'ez3d.project',
-        version: 1,
+        schema: PROJECT_SCHEMA,
+        version: PROJECT_VERSION,
         savedAt: new Date().toISOString(),
+        metadata: createSnapshotMetadata({ objects, lights, comments, carpet }),
         space: { width: spaceWidth, length: spaceLength },
         settings: {
             gridSnapEnabled,
@@ -2321,10 +2327,10 @@ function createProjectSnapshot() {
             guidesVisible,
             isLightMode,
         },
-        objects: draggableObjects.map(_serializeObject).filter(Boolean),
-        lights: sceneLights.map(_serializeLight),
-        carpet: floorTiles.map(t => t.color),
-        comments: commentPins.filter(p => !p.isEditing).map(_serializePin),
+        objects,
+        lights,
+        carpet,
+        comments,
     };
 }
 
@@ -2424,7 +2430,7 @@ function _clearSceneContent() {
 }
 
 function loadProjectSnapshot(snapshot, options = {}) {
-    if (!snapshot || snapshot.schema !== 'ez3d.project') {
+    if (!isProjectSnapshot(snapshot)) {
         alert('ไฟล์นี้ไม่ใช่ Ez3d project JSON ที่ถูกต้อง');
         return;
     }
@@ -3125,6 +3131,7 @@ function _installDebugHooks() {
             _writeAutosaveNow();
             return _readAutosave();
         },
+        readAutosave: _readAutosave,
         clearAutosave: clearAutosaveDraft,
         restoreAutosave: restoreAutosaveDraft,
     };

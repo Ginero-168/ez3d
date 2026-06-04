@@ -170,8 +170,14 @@ async function run() {
     }
     assertNearVector(ungroupedState.anchor.position, ungroupedState.selectionCenter, 'Undo group anchor');
 
-    const draft = await page.evaluate(() => window.__ez3dDebug.flushAutosave());
+    const draft = await page.evaluate(() => {
+      const snapshot = window.__ez3dDebug.flushAutosave();
+      return snapshot;
+    });
     if (!draft || draft.objects.length < 2) throw new Error('Autosave draft did not capture edited objects.');
+    if (draft.metadata?.objectCount !== draft.objects.length) {
+      throw new Error(`Autosave metadata object count mismatch: ${draft.metadata?.objectCount} vs ${draft.objects.length}.`);
+    }
     await page.reload({ waitUntil: 'networkidle' });
     await page.locator('button', { hasText: 'สร้างพื้นที่ 3D' }).click();
     await page.waitForTimeout(500);
@@ -179,6 +185,14 @@ async function run() {
     if (restoredDraftState.objects.length < 2) {
       throw new Error(`Autosave restore did not recover objects; got ${restoredDraftState.objects.length}.`);
     }
+
+    const clearedDraft = await page.evaluate(snapshot => {
+      window.clearAllWorkspace();
+      const cleared = window.__ez3dDebug.readAutosave();
+      window.loadProjectSnapshot(snapshot);
+      return cleared;
+    }, draft);
+    if (clearedDraft) throw new Error('Workspace clear did not remove autosave draft.');
 
     await page.locator('#snap-toggle-btn').click();
     const snapText = await page.locator('#snap-toggle-text').innerText();
