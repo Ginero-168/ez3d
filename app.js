@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
+import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
 import './styles.css';
 
 // Ez3d — Exhibition Space 3D Mockup Studio
@@ -59,6 +61,9 @@ let autoRotateEnabled = false;
 let guidesVisible   = true;
 let _tilePaintBatch = []; // group tile paints into one undo entry
 let _activeLightUndo = null;
+const AUTOSAVE_DEBOUNCE_MS = 700;
+let _autosaveTimer = null;
+let _suspendAutosave = false;
 
 // ─── Base physical dimensions at scale(1,1,1) in meters ───────────────────
 const BASE_DIMS = {
@@ -79,6 +84,7 @@ function _pushCmd(cmd) {
     if (_undoStack.length > MAX_UNDO) _undoStack.shift();
     _redoStack = [];
     _refreshUndoRedo();
+    _queueAutosave();
 }
 
 function undo() {
@@ -87,6 +93,7 @@ function undo() {
     cmd.undo();
     _redoStack.push(cmd);
     _refreshUndoRedo();
+    _queueAutosave();
 }
 
 function redo() {
@@ -95,6 +102,7 @@ function redo() {
     cmd.redo();
     _undoStack.push(cmd);
     _refreshUndoRedo();
+    _queueAutosave();
 }
 
 function _refreshUndoRedo() {
@@ -281,6 +289,8 @@ function submitDimensions() {
     document.getElementById('setup-modal').classList.add('hidden');
     document.getElementById('main-ui').classList.remove('hidden');
     init3D(w, l);
+    _maybePromptAutosaveRestore();
+    _queueAutosave();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1344,6 +1354,7 @@ function clearAllWorkspace() {
     updateUI();
     _undoStack = []; _redoStack = [];
     _refreshUndoRedo();
+    clearAutosaveDraft();
 }
 
 const LAYOUT_TEMPLATES = {
@@ -1425,6 +1436,7 @@ function applyLayoutTemplate(templateKey, skipConfirm = false) {
     _undoStack = [];
     _redoStack = [];
     _refreshUndoRedo();
+    _queueAutosave();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1965,23 +1977,6 @@ function updateLayerList() {
         return;
     }
 
-    const OBJ_SVGS = {
-        backdrop: `<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>`,
-        table:    `<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12h18M5 12v8m14-8v8M7 12V8a2 2 0 012-2h6a2 2 0 012 2v4" /></svg>`,
-        bookshelf:`<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 12h16M4 18h16" /></svg>`,
-        cashier:  `<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>`,
-        rollup:   `<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2z" /></svg>`,
-        custom:   `<svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>`
-    };
-
-    const LIGHT_SVGS = {
-        ambient:    `<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>`,
-        hemisphere: `<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z" /></svg>`,
-        directional:`<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 5a7 7 0 110 14 7 7 0 010-14z" /></svg>`,
-        point:      `<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>`,
-        spot:       `<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>`
-    };
-
     // ── Objects section
     if (draggableObjects.length) {
         const objHeader = document.createElement('div');
@@ -1995,7 +1990,7 @@ function updateLayerList() {
             item.className = 'flex items-center space-x-2 px-2.5 py-1.5 rounded-xl cursor-pointer transition-all text-xs border ' +
                 (sel ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300' : 'bg-white/5 border-transparent hover:bg-white/10 text-white/75');
             item.onclick = () => { showLeftTab('layers'); selectObject(obj); };
-            const svgIcon = OBJ_SVGS[obj.userData.type] || OBJ_SVGS.custom;
+            const svgIcon = OBJECT_LAYER_ICONS[obj.userData.type] || OBJECT_LAYER_ICONS.custom;
             item.innerHTML = `${svgIcon}<span class="flex-1 truncate font-medium ml-1.5">${obj.name}</span>${sel?'<span class="text-cyan-400 text-[9px] flex-shrink-0">✓</span>':''}`;
             c.appendChild(item);
         });
@@ -2014,7 +2009,7 @@ function updateLayerList() {
             item.className = 'flex items-center space-x-2 px-2.5 py-1.5 rounded-xl cursor-pointer transition-all text-xs border ' +
                 (sel ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300' : 'bg-white/5 border-transparent hover:bg-white/10 text-white/75');
             item.onclick = () => { showLeftTab('layers'); selectLight(entry); };
-            const svgIcon = LIGHT_SVGS[entry.type] || LIGHT_SVGS.point;
+            const svgIcon = LIGHT_LAYER_ICONS[entry.type] || LIGHT_LAYER_ICONS.point;
             item.innerHTML = `${svgIcon}<span class="flex-1 truncate font-medium ml-1.5">${entry.name}</span>${sel?'<span class="text-yellow-400 text-[9px] flex-shrink-0">✓</span>':''}`;
             c.appendChild(item);
         });
@@ -2333,6 +2328,45 @@ function createProjectSnapshot() {
     };
 }
 
+function _queueAutosave() {
+    if (_suspendAutosave || !scene) return;
+    clearTimeout(_autosaveTimer);
+    _autosaveTimer = setTimeout(_writeAutosaveNow, AUTOSAVE_DEBOUNCE_MS);
+}
+
+function _writeAutosaveNow() {
+    if (_suspendAutosave || !scene) return;
+    writeAutosaveDraft(createProjectSnapshot());
+}
+
+function _readAutosave() {
+    return readAutosaveDraft();
+}
+
+function clearAutosaveDraft() {
+    clearTimeout(_autosaveTimer);
+    clearAutosaveDraftStorage();
+}
+
+function restoreAutosaveDraft() {
+    const snapshot = _readAutosave();
+    if (!snapshot) return false;
+    loadProjectSnapshot(snapshot, { preserveAutosave: true });
+    return true;
+}
+
+function _maybePromptAutosaveRestore() {
+    if (_suspendAutosave) return;
+    const snapshot = _readAutosave();
+    if (!snapshot) return;
+    const savedAt = snapshot.savedAt ? new Date(snapshot.savedAt).toLocaleString('th-TH') : 'ไม่ทราบเวลา';
+    if (confirm(`พบงานร่าง Ez3d ที่บันทึกอัตโนมัติไว้เมื่อ ${savedAt}\nต้องการกู้คืนงานนี้หรือไม่?`)) {
+        loadProjectSnapshot(snapshot, { preserveAutosave: true });
+    } else {
+        clearAutosaveDraft();
+    }
+}
+
 function downloadProjectFile() {
     const snapshot = createProjectSnapshot();
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
@@ -2389,12 +2423,13 @@ function _clearSceneContent() {
     _pinId = 0;
 }
 
-function loadProjectSnapshot(snapshot) {
+function loadProjectSnapshot(snapshot, options = {}) {
     if (!snapshot || snapshot.schema !== 'ez3d.project') {
         alert('ไฟล์นี้ไม่ใช่ Ez3d project JSON ที่ถูกต้อง');
         return;
     }
 
+    _suspendAutosave = true;
     const W = snapshot.space?.width || 15;
     const L = snapshot.space?.length || 15;
     if (!scene) {
@@ -2449,6 +2484,8 @@ function loadProjectSnapshot(snapshot) {
     _undoStack = [];
     _redoStack = [];
     _refreshUndoRedo();
+    _suspendAutosave = false;
+    if (!options.preserveAutosave) _queueAutosave();
 }
 
 function loadProjectFile(file) {
@@ -3083,6 +3120,13 @@ function _installDebugHooks() {
             targets.slice(1).forEach(obj => selectObject(obj, true));
             return targets.length === list.length;
         },
+        flushAutosave() {
+            clearTimeout(_autosaveTimer);
+            _writeAutosaveNow();
+            return _readAutosave();
+        },
+        clearAutosave: clearAutosaveDraft,
+        restoreAutosave: restoreAutosaveDraft,
     };
 }
 
@@ -3122,6 +3166,8 @@ _g.setCameraAngle      = setCameraAngle;
 _g.captureMockup       = captureMockup;
 _g.createProjectSnapshot = createProjectSnapshot;
 _g.loadProjectSnapshot = loadProjectSnapshot;
+_g.restoreAutosaveDraft = restoreAutosaveDraft;
+_g.clearAutosaveDraft = clearAutosaveDraft;
 _g.downloadProjectFile = downloadProjectFile;
 _g.loadProjectFile     = loadProjectFile;
 _g.duplicateSelected   = duplicateSelected;
@@ -3167,3 +3213,7 @@ _g.toggleTurboMode     = toggleTurboMode;
 _g.beginLightUndo      = beginLightUndo;
 _g.commitLightUndo     = commitLightUndo;
 _installDebugHooks();
+window.addEventListener('beforeunload', () => {
+    clearTimeout(_autosaveTimer);
+    _writeAutosaveNow();
+});

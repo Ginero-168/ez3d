@@ -53,6 +53,13 @@ async function run() {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     const errors = [];
     page.on('pageerror', err => errors.push(String(err.stack || err.message || err)));
+    page.on('dialog', async dialog => {
+      if (dialog.message().includes('พบงานร่าง Ez3d')) {
+        await dialog.accept();
+      } else {
+        await dialog.dismiss();
+      }
+    });
 
     await page.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
     await page.locator('button', { hasText: 'สร้างพื้นที่ 3D' }).click();
@@ -162,6 +169,16 @@ async function run() {
       throw new Error(`Undo group should restore two selected objects; got ${ungroupedState.selectedCount}.`);
     }
     assertNearVector(ungroupedState.anchor.position, ungroupedState.selectionCenter, 'Undo group anchor');
+
+    const draft = await page.evaluate(() => window.__ez3dDebug.flushAutosave());
+    if (!draft || draft.objects.length < 2) throw new Error('Autosave draft did not capture edited objects.');
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.locator('button', { hasText: 'สร้างพื้นที่ 3D' }).click();
+    await page.waitForTimeout(500);
+    const restoredDraftState = await page.evaluate(() => window.__ez3dDebug.getState());
+    if (restoredDraftState.objects.length < 2) {
+      throw new Error(`Autosave restore did not recover objects; got ${restoredDraftState.objects.length}.`);
+    }
 
     await page.locator('#snap-toggle-btn').click();
     const snapText = await page.locator('#snap-toggle-text').innerText();
