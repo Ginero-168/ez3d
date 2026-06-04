@@ -261,6 +261,21 @@ function submitDimensions() {
 // 3D ENGINE INIT
 // ══════════════════════════════════════════════════════════════════════════
 function init3D(W, L) {
+    // WebGL support check
+    try {
+        const tempCanvas = document.createElement('canvas');
+        const supportsWebGL = !!(window.WebGLRenderingContext && (tempCanvas.getContext('webgl') || tempCanvas.getContext('experimental-webgl')));
+        if (!supportsWebGL) {
+            const errOverlay = document.getElementById('webgl-error-overlay');
+            if (errOverlay) errOverlay.classList.remove('hidden');
+            return;
+        }
+    } catch (e) {
+        const errOverlay = document.getElementById('webgl-error-overlay');
+        if (errOverlay) errOverlay.classList.remove('hidden');
+        return;
+    }
+
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0b0d);
     scene.fog = new THREE.FogExp2(0x0a0b0d, 0.012);
@@ -270,7 +285,11 @@ function init3D(W, L) {
     const canvas = document.getElementById('canvas3d');
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(innerWidth, innerHeight);
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    
+    // Optimize DPR for mobile to ensure high frame rates
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 2));
+    
     renderer.shadowMap.enabled  = true;
     renderer.shadowMap.type     = THREE.PCFSoftShadowMap;
     // Research-backed: ACES tone mapping gives cinematic quality for exhibition scenes
@@ -1866,6 +1885,10 @@ function loadGLTFObject(file) {
     const url = URL.createObjectURL(file);
     const loader = new THREE.GLTFLoader();
     
+    // Show loader overlay
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.classList.remove('hidden');
+    
     loader.load(url, (gltf) => {
         const model = gltf.scene;
         
@@ -1907,9 +1930,15 @@ function loadGLTFObject(file) {
         _cmdAddObject(wrapper);
         selectObject(wrapper);
         URL.revokeObjectURL(url);
+        
+        // Hide loader overlay
+        if (overlay) overlay.classList.add('hidden');
     }, undefined, (error) => {
         console.error("Error loading GLTF model:", error);
         alert("ไม่สามารถโหลดไฟล์ 3D นี้ได้ กรุณาตรวจสอบว่าเป็นไฟล์ GLTF/GLB ที่ถูกต้อง");
+        
+        // Hide loader overlay
+        if (overlay) overlay.classList.add('hidden');
     });
 }
 

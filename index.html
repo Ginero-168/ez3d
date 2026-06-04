@@ -177,6 +177,34 @@
 </head>
 <body class="bg-[#0b0c10] text-[#c5c6c7] font-sans h-screen w-screen overflow-hidden select-none">
 
+    <!-- ── LOADING OVERLAY ──────────────────────────────────────────────── -->
+    <div id="loading-overlay" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md transition-all duration-300">
+        <div class="flex flex-col items-center space-y-4 p-8 rounded-3xl bg-white/5 border border-white/10 shadow-2xl animate-pulse">
+            <div class="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin"></div>
+            <div class="text-center space-y-1">
+                <p class="text-sm font-bold text-white tracking-wider">กำลังโหลดโมเดล 3D...</p>
+                <p class="text-[10px] text-white/50">โปรดรอสักครู่ ระบบกำลังจัดเตรียมข้อมูลวัตถุ</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── WEBGL COMPATIBILITY CHECK OVERLAY ────────────────────────────── -->
+    <div id="webgl-error-overlay" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0b0d] p-6 text-center select-text">
+        <div class="max-w-md p-8 rounded-3xl bg-red-500/5 border border-red-500/10 shadow-2xl space-y-4">
+            <div class="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto text-red-400">
+                <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            </div>
+            <div class="space-y-2">
+                <h1 class="text-lg font-bold text-white">ไม่สามารถเปิดใช้งาน WebGL ได้</h1>
+                <p class="text-xs text-white/60 leading-relaxed">
+                    เบราว์เซอร์หรืออุปกรณ์ของคุณไม่รองรับ WebGL หรือปิดใช้งานอยู่ ซึ่งจำเป็นสำหรับระบบจำลอง 3D นี้ กรุณาเปิดใช้งาน WebGL หรือลองใช้เบราว์เซอร์อื่น เช่น Google Chrome, Safari หรือ Firefox
+                </p>
+            </div>
+        </div>
+    </div>
+
 <!-- ═══ SETUP MODAL ═══════════════════════════════════════════════════════ -->
 <div id="setup-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl">
     <div class="bg-black/60 border border-white/10 p-8 rounded-3xl w-full max-w-sm shadow-2xl text-center space-y-6">
