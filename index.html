@@ -15,11 +15,26 @@
     <style>
         /* ── Light Mode ────────────────────────────────────────────── */
         body.light-mode { background:#f2ede4!important; }
-        body.light-mode header,body.light-mode aside,body.light-mode footer{background:rgba(242,237,228,.94)!important;border-color:rgba(0,0,0,.1)!important;}
-        body.light-mode .text-white{color:#1a1208!important;}body.light-mode .text-white\/80{color:#2a2010!important;}body.light-mode .text-white\/70{color:#3a3020!important;}body.light-mode .text-white\/60{color:#4a4030!important;}body.light-mode .text-white\/50{color:#5a5040!important;}body.light-mode .text-white\/40{color:#6a6050!important;}body.light-mode .text-white\/30{color:#7a7060!important;}
-        body.light-mode .bg-black\/40,body.light-mode .bg-black\/60{background:rgba(242,237,228,.94)!important;}
-        body.light-mode .bg-white\/5{background:rgba(0,0,0,.04)!important;}body.light-mode .bg-white\/10{background:rgba(0,0,0,.07)!important;}
-        body.light-mode .border-white\/10{border-color:rgba(0,0,0,.1)!important;}body.light-mode .border-white\/5{border-color:rgba(0,0,0,.06)!important;}body.light-mode .border-white\/15{border-color:rgba(0,0,0,.12)!important;}
+        body.light-mode .floating-card {
+            background: rgba(242,237,228,.92) !important;
+            border-color: rgba(0,0,0,.08) !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.06) !important;
+        }
+        body.light-mode .text-white { color:#1a1208!important; }
+        body.light-mode .text-white\/80 { color:#2a2010!important; }
+        body.light-mode .text-white\/70 { color:#3a3020!important; }
+        body.light-mode .text-white\/60 { color:#4a4030!important; }
+        body.light-mode .text-white\/50 { color:#5a5040!important; }
+        body.light-mode .text-white\/40 { color:#6a6050!important; }
+        body.light-mode .text-white\/30 { color:#7a7060!important; }
+        body.light-mode .bg-black\/40, body.light-mode .bg-black\/30, body.light-mode .bg-black\/65 { background: rgba(242,237,228,.92) !important; }
+        body.light-mode .bg-white\/5 { background: rgba(0,0,0,.04) !important; }
+        body.light-mode .bg-white\/10 { background: rgba(0,0,0,.07) !important; }
+        body.light-mode .border-white\/10 { border-color: rgba(0,0,0,.08) !important; }
+        body.light-mode .border-white\/5 { border-color: rgba(0,0,0,.05) !important; }
+        body.light-mode .border-white\/15 { border-color: rgba(0,0,0,.1) !important; }
+        body.light-mode .section-label { color: rgba(0,0,0,.35) !important; }
+        body.light-mode .section-label::after { background: rgba(0,0,0,.08) !important; }
 
         /* ── Inputs ────────────────────────────────────────────────── */
         input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
@@ -28,19 +43,51 @@
 
         /* ── Scrollbar ─────────────────────────────────────────────── */
         ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px;}
+        body.light-mode ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);}
 
         /* ── Section Label ─────────────────────────────────────────── */
         .section-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.3);display:flex;align-items:center;gap:6px;}
         .section-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.08);}
-        body.light-mode .section-label{color:rgba(0,0,0,.28);}
-        body.light-mode .section-label::after{background:rgba(0,0,0,.08);}
 
         /* ── Disabled button ───────────────────────────────────────── */
         button:disabled{opacity:.35;cursor:not-allowed;}
+
+        /* ── Toolbar buttons ──────────────────────────────────────── */
+        .toolbar-btn {
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            background: transparent;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .toolbar-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+        }
+        .toolbar-btn.active {
+            background: rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            color: rgb(103, 232, 249);
+        }
+        body.light-mode .toolbar-btn:hover {
+            background: rgba(0, 0, 0, 0.04);
+            color: #000;
+        }
+        body.light-mode .toolbar-btn.active {
+            background: rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            color: rgb(8, 145, 178);
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script type="module" crossorigin src="./assets/index-BAy12xY7.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script type="module" crossorigin src="./assets/index-CiIiSd4l.js"></script>
 </head>
 <body class="bg-[#0b0c10] text-[#c5c6c7] font-sans h-screen w-screen overflow-hidden select-none">
 
@@ -53,7 +100,7 @@
                 <g style="mix-blend-mode:multiply"><path d="M60.4 45.5L31.7 47.3L6.2 92.1L29.2 65.9C37.5 56.4 48.3 49.4 60.4 45.5Z" fill="#00FFFF"/><path d="M3 49.1L31.7 47.3L57.1 2.5L34.1 28.7C25.8 38.2 15 45.2 3 49.1Z" fill="#00FFFF"/></g>
             </svg>
         </div>
-        <div>
+        <div class="space-y-1">
             <h2 class="text-white font-bold text-2xl tracking-wider">Ez3d</h2>
             <p class="text-xs text-white/40 mt-1">Exhibition Space Mockup Studio</p>
         </div>
@@ -70,7 +117,7 @@
             </div>
         </div>
         <button onclick="submitDimensions()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl py-4 transition-all shadow-[0_0_24px_rgba(6,182,212,.5)] text-sm tracking-wider">
-            ✦ สร้างพื้นที่ 3D
+            สร้างพื้นที่ 3D
         </button>
     </div>
 </div>
@@ -78,462 +125,651 @@
 <!-- ═══ 3D CANVAS ═══════════════════════════════════════════════════════════ -->
 <canvas id="canvas3d" class="absolute inset-0 w-full h-full z-0 block outline-none"></canvas>
 
-<!-- ═══ MAIN UI ═════════════════════════════════════════════════════════════ -->
-<div id="main-ui" class="hidden absolute inset-0 pointer-events-none z-10 flex flex-col p-4 gap-3">
+<!-- ═══ MAIN FLOATING UI ═════════════════════════════════════════════════════ -->
+<div id="main-ui" class="hidden absolute inset-0 pointer-events-none z-10">
 
-    <!-- ── HEADER ──────────────────────────────────────────────────────── -->
-    <header class="pointer-events-auto flex items-center justify-between bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-2.5 shadow-2xl flex-shrink-0">
-        <!-- Logo -->
-        <div class="flex items-center space-x-2.5">
-            <svg viewBox="0 0 62 94" fill="none" class="w-7 h-7 filter drop-shadow-[0_0_6px_rgba(0,255,244,.5)]">
+    <!-- ── TOP-LEFT FLOATING STATUS PILL ────────────────────────────────────── -->
+    <div class="fixed left-20 top-4 floating-card bg-black/30 backdrop-blur-md rounded-2xl border border-white/5 px-4 h-12 shadow-2xl flex items-center gap-3 text-xs text-white/80 pointer-events-auto">
+        <div class="flex items-center space-x-2">
+            <svg viewBox="0 0 62 94" fill="none" class="w-5 h-5 filter drop-shadow-[0_0_4px_rgba(0,255,244,.5)]">
                 <g style="mix-blend-mode:multiply"><path d="M59.4 45L30.7 46.8L5.2 91.6L28.2 65.4C36.5 55.9 47.3 48.9 59.4 45Z" fill="#FFFF00"/><path d="M2 48.6L30.7 46.8L56.1 2L33.1 28.2C24.8 37.7 14 44.7 2 48.6Z" fill="#FFFF00"/></g>
                 <g style="mix-blend-mode:multiply"><path d="M60.4 45.5L31.7 47.3L6.2 92.1L29.2 65.9C37.5 56.4 48.3 49.4 60.4 45.5Z" fill="#00FFFF"/><path d="M3 49.1L31.7 47.3L57.1 2.5L34.1 28.7C25.8 38.2 15 45.2 3 49.1Z" fill="#00FFFF"/></g>
             </svg>
-            <div>
-                <h1 class="text-white font-bold text-sm tracking-[.2em]">Ez3d</h1>
-                <p class="text-[9px] text-white/40" id="ui-current-dimensions">16 × 3 ม.</p>
+            <span class="font-bold tracking-wider text-white">Ez3d</span>
+        </div>
+        <div class="w-px h-4 bg-white/10"></div>
+        <div>
+            <span class="text-white/40">ขนาด: </span>
+            <span id="ui-current-dimensions" class="font-mono font-medium">16 × 3 ม.</span>
+        </div>
+        <div class="w-px h-4 bg-white/10"></div>
+        <div>
+            <span class="text-white/40">พรม: </span>
+            <span id="ui-tile-count" class="font-mono font-bold text-cyan-400">0</span>
+            <span class="text-white/40"> แผ่น</span>
+        </div>
+    </div>
+
+    <!-- ── LEFT TOOLBAR (VERTICAL) ────────────────────────────────────────── -->
+    <nav class="fixed left-4 top-4 bottom-4 w-14 floating-card bg-black/30 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl flex flex-col justify-between items-center py-4 z-30 pointer-events-auto">
+        <!-- Top Section: Logo & Toggle Panels -->
+        <div class="flex flex-col items-center w-full gap-2">
+            <!-- Branding icon (cube decoration) -->
+            <div class="text-cyan-400 py-1" title="Ez3d Studio">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
             </div>
+            <div class="w-8 h-px bg-white/10 my-1"></div>
+            
+            <!-- Assets Toggle Button -->
+            <button id="tab-btn-assets" onclick="toggleLeftPanel('assets')" class="toolbar-btn text-white/50 hover:text-white" title="เพิ่มวัตถุและไฟ (Assets)">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+            </button>
+            
+            <!-- Layers Toggle Button -->
+            <button id="tab-btn-layers" onclick="toggleLeftPanel('layers')" class="toolbar-btn text-white/50 hover:text-white" title="รายการเลเยอร์ (Layers)">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6l8-4 8 4m-16 6l8-4 8 4M4 18l8-4 8 4" />
+                </svg>
+            </button>
+            
+            <!-- Paint Toggle Button -->
+            <button id="tab-btn-paint" onclick="toggleLeftPanel('paint')" class="toolbar-btn text-white/50 hover:text-white" title="ระบายสีพรม (Carpet Paint)">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.243 4.828a1 1 0 011.414 0l2.518 2.518a1 1 0 010 1.414l-9.828 9.829a2 2 0 01-1.026.54l-3.328.665a.5.5 0 01-.586-.586l.666-3.328a2 2 0 01.54-1.026l9.828-9.829z" />
+                </svg>
+            </button>
         </div>
 
-        <!-- Undo / Redo / Auto-rotate -->
-        <div class="flex items-center space-x-1.5">
-            <button id="btn-undo" onclick="undo()" disabled
-                class="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-1.5 text-xs font-medium transition-all text-white/70 flex items-center space-x-1"
-                title="Undo (Ctrl+Z)">
-                <span>↩</span><span class="hidden sm:inline text-[10px]">Undo</span>
+        <!-- Bottom Section: Undo, Redo, Auto-rotate, Theme -->
+        <div class="flex flex-col items-center w-full gap-2">
+            <!-- Undo -->
+            <button id="btn-undo" onclick="undo()" class="toolbar-btn text-white/50 hover:text-white disabled:opacity-30 disabled:pointer-events-none" title="เลิกทำ (Undo)" disabled>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
             </button>
-            <button id="btn-redo" onclick="redo()" disabled
-                class="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-1.5 text-xs font-medium transition-all text-white/70 flex items-center space-x-1"
-                title="Redo (Ctrl+Y)">
-                <span>↪</span><span class="hidden sm:inline text-[10px]">Redo</span>
+            
+            <!-- Redo -->
+            <button id="btn-redo" onclick="redo()" class="toolbar-btn text-white/50 hover:text-white disabled:opacity-30 disabled:pointer-events-none" title="ทำซ้ำ (Redo)" disabled>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                </svg>
             </button>
-            <div class="w-px h-5 bg-white/10"></div>
-            <button id="btn-auto-rotate" onclick="toggleAutoRotate()"
-                class="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-1.5 text-[10px] font-medium transition-all text-white/70"
-                title="Auto-rotate (A)">
-                🔄 Auto Rotate
+            
+            <div class="w-8 h-px bg-white/10 my-0.5"></div>
+
+            <!-- Auto Rotate -->
+            <button id="btn-auto-rotate" onclick="toggleAutoRotate()" class="toolbar-btn text-white/50 hover:text-white" title="หมุนกล้องอัตโนมัติ">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89" />
+                </svg>
+            </button>
+            
+            <!-- Theme Toggle -->
+            <button id="light-mode-btn" onclick="toggleLightMode()" class="toolbar-btn text-white/50 hover:text-white" title="เปลี่ยนโหมดสี (Theme)">
+                <!-- Moon icon (dark mode active) -->
+                <svg id="theme-icon-moon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+                <!-- Sun icon (light mode active) -->
+                <svg id="theme-icon-sun" class="w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z" />
+                </svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ── LEFT FLOATING PANEL (TOGGLED) ───────────────────────────────────── -->
+    <aside id="left-floating-panel" class="fixed left-20 top-4 bottom-4 w-72 floating-card bg-black/30 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl z-20 flex flex-col overflow-hidden hidden pointer-events-auto">
+        <!-- Panel Header -->
+        <div class="px-4 py-3.5 flex items-center justify-between border-b border-white/5">
+            <span id="left-panel-title" class="text-white font-bold text-sm">เครื่องมือ</span>
+            <button onclick="toggleLeftPanel(activeLeftPanel)" class="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12" />
+                </svg>
             </button>
         </div>
 
-        <!-- Right controls -->
-        <div class="flex items-center space-x-2">
-            <div class="hidden lg:flex items-center space-x-2 text-[9px] text-white/35 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5">
-                <span><kbd class="bg-white/10 px-1 py-0.5 rounded text-cyan-400">Ctrl+Z</kbd> Undo</span>
-                <span class="text-white/20">|</span>
-                <span><kbd class="bg-white/10 px-1 py-0.5 rounded text-cyan-400">Del</kbd> ลบ</span>
-                <span class="text-white/20">|</span>
-                <span><kbd class="bg-white/10 px-1 py-0.5 rounded text-cyan-400">R</kbd> หมุน</span>
-                <span class="text-white/20">|</span>
-                <span><kbd class="bg-white/10 px-1 py-0.5 rounded text-cyan-400">A</kbd> Rotate</span>
-            </div>
-            <button id="light-mode-btn" onclick="toggleLightMode()"
-                class="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-1.5 text-xs transition-all text-white/70">
-                ☀️ Light
-            </button>
-            <div class="text-right">
-                <div class="text-[9px] text-white/35">Tiles</div>
-                <div class="text-sm font-bold text-cyan-400" id="ui-tile-count">0</div>
-            </div>
-        </div>
-    </header>
+        <!-- Panel Contents Wrapper -->
+        <div class="flex-1 overflow-y-auto min-h-0">
+            
+            <!-- ── PANEL: ASSETS ── -->
+            <div id="panel-assets" class="p-3 space-y-4 hidden">
+                <!-- Objects section -->
+                <div class="space-y-1.5">
+                    <p class="section-label">วัตถุมาตรฐาน</p>
+                    <button onclick="spawnItem('backdrop')" class="asset-btn">
+                        <div class="asset-icon">
+                            <svg class="w-5 h-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <div class="ml-2.5 min-w-0 text-left">
+                            <span class="text-white font-medium block text-xs">ผนังแบคดรอป</span>
+                            <span class="text-[10px] text-white/35">เต็มความกว้าง × 2.50 ม.</span>
+                        </div>
+                    </button>
+                    <button onclick="spawnItem('table')" class="asset-btn">
+                        <div class="asset-icon">
+                            <svg class="w-5 h-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12h18M5 12v8m14-8v8M7 12V8a2 2 0 012-2h6a2 2 0 012 2v4" />
+                            </svg>
+                        </div>
+                        <div class="ml-2.5 min-w-0 text-left">
+                            <span class="text-white font-medium block text-xs">โต๊ะคลุมผ้า</span>
+                            <span class="text-[10px] text-white/35">1.50 × 0.76 × 0.75 ม.</span>
+                        </div>
+                    </button>
+                    <button onclick="spawnItem('bookshelf')" class="asset-btn">
+                        <div class="asset-icon">
+                            <svg class="w-5 h-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </div>
+                        <div class="ml-2.5 min-w-0 text-left">
+                            <span class="text-white font-medium block text-xs">ชั้นขั้นบันได</span>
+                            <span class="text-[10px] text-white/35">1.40 × 1.00 × 1.00 ม.</span>
+                        </div>
+                    </button>
+                    <button onclick="spawnItem('cashier')" class="asset-btn">
+                        <div class="asset-icon">
+                            <svg class="w-5 h-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <div class="ml-2.5 min-w-0 text-left">
+                            <span class="text-white font-medium block text-xs">เคาน์เตอร์</span>
+                            <span class="text-[10px] text-white/35">1.00 × 0.95 × 0.85 ม.</span>
+                        </div>
+                    </button>
+                    <button onclick="spawnItem('rollup')" class="asset-btn">
+                        <div class="asset-icon">
+                            <svg class="w-5 h-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <div class="ml-2.5 min-w-0 text-left">
+                            <span class="text-white font-medium block text-xs">ป้ายโรลอัป</span>
+                            <span class="text-[10px] text-white/35">0.80 × 2.00 × 0.05 ม.</span>
+                        </div>
+                    </button>
+                </div>
 
-    <!-- ── MAIN CONTENT ────────────────────────────────────────────────── -->
-    <div class="flex-1 flex gap-3 min-h-0">
+                <!-- Custom 3D Object Upload -->
+                <div class="space-y-1.5 pt-1">
+                    <p class="section-label">โมเดล 3D กำหนดเอง</p>
+                    <button onclick="document.getElementById('gltf-file-input').click()" class="asset-btn border-dashed border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10">
+                        <div class="asset-icon bg-emerald-500/10">
+                            <svg class="w-5 h-5 text-emerald-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                        </div>
+                        <div class="ml-2.5 min-w-0 text-left">
+                            <span class="text-emerald-400 font-semibold block text-xs">อัปโหลดไฟล์ 3D</span>
+                            <span class="text-[10px] text-emerald-400/50">รองรับ .gltf / .glb</span>
+                        </div>
+                        <input type="file" id="gltf-file-input" class="hidden" accept=".gltf,.glb" onchange="loadGLTFObject(this.files[0])">
+                    </button>
+                </div>
 
-        <!-- ════ LEFT PANEL ══════════════════════════════════════════════ -->
-        <aside class="pointer-events-auto w-64 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex flex-col overflow-hidden shadow-2xl flex-shrink-0">
-
-            <!-- Tabs: Assets | Layers -->
-            <div class="grid grid-cols-2 border-b border-white/10 flex-shrink-0">
-                <button id="tab-assets" onclick="showLeftTab('assets')"
-                    class="py-3 text-[10px] font-bold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all flex-1">
-                    📦 Assets
-                </button>
-                <button id="tab-layers" onclick="showLeftTab('layers')"
-                    class="py-3 text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-all flex-1">
-                    📋 Layers
-                </button>
-            </div>
-
-            <!-- Panel: Assets -->
-            <div id="panel-assets" class="flex-1 flex flex-col overflow-hidden">
-                <div class="flex-1 overflow-y-auto p-3 space-y-4">
-
-                    <!-- Objects section -->
-                    <div class="space-y-1.5">
-                        <p class="section-label">วัตถุ</p>
-                        <button onclick="spawnItem('backdrop')" class="asset-btn">
-                            <div class="asset-icon">🖼️</div>
-                            <div class="ml-2.5 min-w-0 text-left">
-                                <span class="text-white font-medium block text-xs">ผนังแบคดรอป</span>
-                                <span class="text-[10px] text-white/35">เต็มความกว้าง</span>
-                            </div>
+                <!-- Lights section -->
+                <div class="space-y-1.5 pt-1">
+                    <p class="section-label">เพิ่มแสงไฟ</p>
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button onclick="addLight('ambient')"
+                            class="flex flex-col items-center p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
+                            <svg class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                            </svg>
+                            <span class="text-[10px] mt-1 font-medium">Ambient</span>
                         </button>
-                        <button onclick="spawnItem('table')" class="asset-btn">
-                            <div class="asset-icon">🪑</div>
-                            <div class="ml-2.5 min-w-0 text-left"><span class="text-white font-medium block text-xs">โต๊ะคลุมผ้า</span><span class="text-[10px] text-white/35">1.50 × 0.75 ม.</span></div>
+                        <button onclick="addLight('hemisphere')"
+                            class="flex flex-col items-center p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
+                            <svg class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z" />
+                            </svg>
+                            <span class="text-[10px] mt-1 font-medium">Hemisphere</span>
                         </button>
-                        <button onclick="spawnItem('bookshelf')" class="asset-btn">
-                            <div class="asset-icon">📚</div>
-                            <div class="ml-2.5 min-w-0 text-left"><span class="text-white font-medium block text-xs">ชั้นขั้นบันได</span><span class="text-[10px] text-white/35">1.40 × 1.00 ม.</span></div>
+                        <button onclick="addLight('directional')"
+                            class="flex flex-col items-center p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
+                            <svg class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 5a7 7 0 110 14 7 7 0 010-14z" />
+                            </svg>
+                            <span class="text-[10px] mt-1 font-medium">Directional</span>
                         </button>
-                        <button onclick="spawnItem('cashier')" class="asset-btn">
-                            <div class="asset-icon">🖥️</div>
-                            <div class="ml-2.5 min-w-0 text-left"><span class="text-white font-medium block text-xs">เคาน์เตอร์</span><span class="text-[10px] text-white/35">1.00 × 0.80 ม.</span></div>
+                        <button onclick="addLight('point')"
+                            class="flex flex-col items-center p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
+                            <svg class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                            <span class="text-[10px] mt-1 font-medium">Point Light</span>
                         </button>
-                        <button onclick="spawnItem('rollup')" class="asset-btn">
-                            <div class="asset-icon">🪧</div>
-                            <div class="ml-2.5 min-w-0 text-left"><span class="text-white font-medium block text-xs">ป้ายโรลอัป</span><span class="text-[10px] text-white/35">0.80 × 2.00 ม.</span></div>
+                        <button onclick="addLight('spot')"
+                            class="col-span-2 flex items-center justify-center space-x-2 p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
+                            <svg class="w-4 h-4 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                            <span class="text-[10px] font-medium">Spot Light</span>
                         </button>
                     </div>
+                </div>
 
-                    <!-- Lights section -->
-                    <div class="space-y-1.5">
-                        <p class="section-label">💡 เพิ่มแสง</p>
-                        <div class="grid grid-cols-2 gap-1.5">
-                            <button onclick="addLight('ambient')"
-                                class="flex flex-col items-center p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
-                                <span class="text-lg">✨</span><span class="text-[10px] mt-0.5">Ambient</span>
-                            </button>
-                            <button onclick="addLight('hemisphere')"
-                                class="flex flex-col items-center p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
-                                <span class="text-lg">🌅</span><span class="text-[10px] mt-0.5">Hemisphere</span>
-                            </button>
-                            <button onclick="addLight('directional')"
-                                class="flex flex-col items-center p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
-                                <span class="text-lg">☀️</span><span class="text-[10px] mt-0.5">Directional</span>
-                            </button>
-                            <button onclick="addLight('point')"
-                                class="flex flex-col items-center p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
-                                <span class="text-lg">💡</span><span class="text-[10px] mt-0.5">Point</span>
-                            </button>
-                            <button onclick="addLight('spot')"
-                                class="col-span-2 flex items-center justify-center space-x-1.5 p-2 rounded-xl border border-white/5 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/30 transition-all text-xs text-white/70">
-                                <span class="text-base">🔦</span><span class="text-[10px]">Spot Light</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Light Presets -->
-                    <div class="space-y-1.5">
-                        <p class="section-label">🎬 Light Presets</p>
-                        <div class="space-y-1">
-                            <button onclick="applyLightPreset('studio')"
-                                class="w-full text-left px-3 py-2 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70">
-                                🎬 Studio 3-Point — Key/Fill/Rim
-                            </button>
-                            <button onclick="applyLightPreset('exhibition')"
-                                class="w-full text-left px-3 py-2 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70">
-                                🏛️ Exhibition Hall — Overhead
-                            </button>
-                            <button onclick="applyLightPreset('dramatic')"
-                                class="w-full text-left px-3 py-2 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70">
-                                🎭 Dramatic Stage — Colored Spots
-                            </button>
-                            <button onclick="applyLightPreset('daylight')"
-                                class="w-full text-left px-3 py-2 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70">
-                                🌤️ Daylight — Sun + Sky
-                            </button>
-                            <button onclick="applyLightPreset('moody')"
-                                class="w-full text-left px-3 py-2 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70">
-                                🕯️ Moody — Single Warm Lamp
-                            </button>
-                        </div>
+                <!-- Light Presets -->
+                <div class="space-y-1.5 pt-1">
+                    <p class="section-label">รูปแบบจัดแสงไฟ (Presets)</p>
+                    <div class="space-y-1">
+                        <button onclick="applyLightPreset('studio')"
+                            class="w-full text-left px-3 py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70 font-medium">
+                            Studio 3-Point — Key/Fill/Rim
+                        </button>
+                        <button onclick="applyLightPreset('exhibition')"
+                            class="w-full text-left px-3 py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70 font-medium">
+                            Exhibition Hall — Overhead
+                        </button>
+                        <button onclick="applyLightPreset('dramatic')"
+                            class="w-full text-left px-3 py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70 font-medium">
+                            Dramatic Stage — Colored Spots
+                        </button>
+                        <button onclick="applyLightPreset('daylight')"
+                            class="w-full text-left px-3 py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70 font-medium">
+                            Daylight — Sun + Sky
+                        </button>
+                        <button onclick="applyLightPreset('moody')"
+                            class="w-full text-left px-3 py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70 font-medium">
+                            Moody — Single Warm Lamp
+                        </button>
                     </div>
                 </div>
 
                 <!-- Camera Controls -->
-                <div class="p-3 border-t border-white/10 bg-white/5 space-y-2 flex-shrink-0">
-                    <p class="text-[9px] text-white/40 font-medium uppercase tracking-wider">มุมกล้อง</p>
+                <div class="space-y-1.5 pt-1">
+                    <p class="section-label">มุมมองกล้อง</p>
                     <div class="flex space-x-1.5">
-                        <button onclick="setCameraAngle('top')"          class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] hover:bg-white/10 hover:border-cyan-400/50 transition-all">แปลน</button>
-                        <button onclick="setCameraAngle('isometric_left')"  class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] hover:bg-white/10 hover:border-cyan-400/50 transition-all">ซ้าย</button>
-                        <button onclick="setCameraAngle('isometric_right')" class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] hover:bg-white/10 hover:border-cyan-400/50 transition-all">ขวา</button>
+                        <button onclick="setCameraAngle('top')"          class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] font-medium hover:bg-white/10 hover:border-cyan-400/50 transition-all">แปลน</button>
+                        <button onclick="setCameraAngle('isometric_left')"  class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] font-medium hover:bg-white/10 hover:border-cyan-400/50 transition-all">ซ้าย</button>
+                        <button onclick="setCameraAngle('isometric_right')" class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] font-medium hover:bg-white/10 hover:border-cyan-400/50 transition-all">ขวา</button>
                     </div>
                 </div>
             </div>
 
-            <!-- Panel: Layers -->
-            <div id="panel-layers" class="hidden flex-1 flex flex-col overflow-hidden">
-                <div class="px-3 py-2 border-b border-white/10 flex-shrink-0">
-                    <p class="text-[10px] text-white/40">คลิกเพื่อเลือก วัตถุหรือแสง</p>
+            <!-- ── PANEL: LAYERS ── -->
+            <div id="panel-layers" class="hidden">
+                <div class="px-3 py-2 border-b border-white/5 flex-shrink-0">
+                    <p class="text-[10px] text-white/40">คลิกที่รายการด้านล่างเพื่อปรับแก้คุณสมบัติ</p>
                 </div>
-                <div id="layer-list" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
-            </div>
-        </aside>
-
-        <!-- ════ RIGHT PANEL ══════════════════════════════════════════════ -->
-        <aside class="pointer-events-auto w-72 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl flex flex-col overflow-hidden shadow-2xl flex-shrink-0 ml-auto">
-
-            <!-- Tabs: Edit | Paint -->
-            <div class="grid grid-cols-2 border-b border-white/10 flex-shrink-0">
-                <button id="tab-edit" onclick="setMode('objects')"
-                    class="py-3 text-[10px] font-bold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all flex-1">🪄 แก้ไข</button>
-                <button id="tab-paint" onclick="setMode('paint')"
-                    class="py-3 text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-all flex-1">🎨 พรม</button>
+                <div id="layer-list" class="p-2 space-y-1">
+                    <!-- Dynamic rendering in JS -->
+                </div>
             </div>
 
-            <!-- Paint Panel -->
-            <div id="panel-paint-mode" class="hidden flex-1 flex flex-col p-4 space-y-4 overflow-y-auto">
+            <!-- ── PANEL: PAINT ── -->
+            <div id="panel-paint" class="p-3 space-y-4 hidden">
                 <div>
-                    <h3 class="text-white font-semibold text-sm">ระบายสีพรม</h3>
-                    <p class="text-[10px] text-white/40 mt-0.5">คลิก / ลากที่ช่องพื้น 3D</p>
+                    <h3 class="text-white font-semibold text-xs">ระบายสีพรมพื้นห้อง</h3>
+                    <p class="text-[10px] text-white/40 mt-0.5">คลิกและลากเมาส์บนแผ่นพื้นเพื่อลงสีพรม</p>
                 </div>
+                
                 <div class="space-y-2">
-                    <p class="section-label">สีพรีเซ็ต</p>
+                    <p class="section-label">สีพรมสำเร็จรูป</p>
                     <div class="grid grid-cols-4 gap-1.5">
-                        <button onclick="selectCarpetBrush('#374151')" class="h-8 rounded-lg border-2 border-white/10 bg-[#374151] hover:scale-105 transition-all"></button>
-                        <button onclick="selectCarpetBrush('#1e3a8a')" class="h-8 rounded-lg border-2 border-transparent bg-[#1e3a8a] hover:scale-105 transition-all"></button>
-                        <button onclick="selectCarpetBrush('#ef4444')" class="h-8 rounded-lg border-2 border-transparent bg-[#ef4444] hover:scale-105 transition-all"></button>
-                        <button onclick="selectCarpetBrush('#15803d')" class="h-8 rounded-lg border-2 border-transparent bg-[#15803d] hover:scale-105 transition-all"></button>
-                        <button onclick="selectCarpetBrush('#d97706')" class="h-8 rounded-lg border-2 border-transparent bg-[#d97706] hover:scale-105 transition-all"></button>
-                        <button onclick="selectCarpetBrush('#7e22ce')" class="h-8 rounded-lg border-2 border-transparent bg-[#7e22ce] hover:scale-105 transition-all"></button>
-                        <button onclick="selectCarpetBrush('#f43f5e')" class="h-8 rounded-lg border-2 border-transparent bg-[#f43f5e] hover:scale-105 transition-all"></button>
-                        <button onclick="selectCarpetBrush('#ffffff')" class="h-8 rounded-lg border-2 border-white/20 bg-white hover:scale-105 transition-all"></button>
+                        <button onclick="selectCarpetBrush('#374151')" class="h-8 rounded-lg border-2 border-white/10 bg-[#374151] hover:scale-105 transition-all" title="เทาดำ"></button>
+                        <button onclick="selectCarpetBrush('#1e3a8a')" class="h-8 rounded-lg border-2 border-transparent bg-[#1e3a8a] hover:scale-105 transition-all" title="น้ำเงิน"></button>
+                        <button onclick="selectCarpetBrush('#ef4444')" class="h-8 rounded-lg border-2 border-transparent bg-[#ef4444] hover:scale-105 transition-all" title="แดง"></button>
+                        <button onclick="selectCarpetBrush('#15803d')" class="h-8 rounded-lg border-2 border-transparent bg-[#15803d] hover:scale-105 transition-all" title="เขียว"></button>
+                        <button onclick="selectCarpetBrush('#d97706')" class="h-8 rounded-lg border-2 border-transparent bg-[#d97706] hover:scale-105 transition-all" title="ส้มเหลือง"></button>
+                        <button onclick="selectCarpetBrush('#7e22ce')" class="h-8 rounded-lg border-2 border-transparent bg-[#7e22ce] hover:scale-105 transition-all" title="ม่วง"></button>
+                        <button onclick="selectCarpetBrush('#f43f5e')" class="h-8 rounded-lg border-2 border-transparent bg-[#f43f5e] hover:scale-105 transition-all" title="ชมพู"></button>
+                        <button onclick="selectCarpetBrush('#ffffff')" class="h-8 rounded-lg border-2 border-white/20 bg-white hover:scale-105 transition-all" title="ขาว"></button>
                     </div>
                 </div>
+                
                 <div class="space-y-2">
-                    <p class="section-label">สีกำหนดเอง</p>
-                    <div class="flex items-center space-x-3 bg-white/5 p-2.5 rounded-xl border border-white/5">
+                    <p class="section-label">เลือกสีกำหนดเอง</p>
+                    <div class="flex items-center space-x-3 bg-white/5 p-2 rounded-xl border border-white/5">
                         <input type="color" id="carpet-brush-color-picker" oninput="selectCarpetBrush(this.value)" value="#374151" class="w-8 h-8 border-0 bg-transparent rounded cursor-pointer outline-none">
                         <span class="text-xs font-mono" id="carpet-brush-hex">#374151 (Active)</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Edit Panel -->
-            <div id="panel-object-mode" class="flex-1 flex flex-col overflow-hidden">
+        </div>
+    </aside>
 
-                <!-- Nothing selected -->
-                <div id="unselected-panel" class="flex-1 flex flex-col justify-center items-center p-6 text-center">
-                    <div class="w-12 h-12 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-white/20 mb-3 animate-pulse">
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></svg>
-                    </div>
-                    <p class="text-white/60 text-xs font-medium">ยังไม่ได้เลือก</p>
-                    <p class="text-[10px] text-white/30 mt-1">คลิกวัตถุ หรือแสง ในฉาก</p>
+    <!-- ── RIGHT PROPERTIES PANEL (ALWAYS VISIBLE) ─────────────────────────── -->
+    <aside class="fixed right-4 top-4 bottom-4 w-80 floating-card bg-black/30 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl z-20 flex flex-col overflow-hidden pointer-events-auto">
+        
+        <!-- Dynamic properties (Object / Light) -->
+        <div id="panel-object-mode" class="flex-1 flex flex-col min-h-0 overflow-y-auto">
+            
+            <!-- Placholder state: Nothing Selected -->
+            <div id="unselected-panel" class="flex-1 flex flex-col justify-center items-center p-6 text-center">
+                <div class="w-12 h-12 bg-white/5 border border-white/10 rounded-full flex items-center justify-center text-white/20 mb-3 animate-pulse">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/>
+                    </svg>
+                </div>
+                <p class="text-white/60 text-xs font-medium">ยังไม่ได้เลือกวัตถุ</p>
+                <p class="text-[10px] text-white/30 mt-1">คลิกเลือกโมเดลหรือจุดไฟในฉาก เพื่อตั้งค่าคุณสมบัติ</p>
+            </div>
+
+            <!-- ── OBJECT SELECTED PROPERTIES ── -->
+            <div id="selected-panel" class="hidden flex flex-col p-4 space-y-4">
+                <!-- Title & Badge -->
+                <div class="flex items-center justify-between pb-2 border-b border-white/5">
+                    <h2 class="text-white font-semibold text-sm truncate mr-2" id="selected-title">Object</h2>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-400/10 text-cyan-400 border border-cyan-400/20" id="selected-badge">TYPE</span>
                 </div>
 
-                <!-- ════ OBJECT SELECTED ════════════════════════════════════════ -->
-                <div id="selected-panel" class="hidden flex-1 flex flex-col overflow-hidden">
-                    <div class="px-4 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
-                        <h2 class="text-white font-semibold text-sm truncate mr-2" id="selected-title">Object</h2>
-                        <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-400/10 text-cyan-400 border border-cyan-400/20 flex-shrink-0" id="selected-badge">TYPE</span>
-                    </div>
-                    <div class="flex-1 overflow-y-auto p-3 space-y-4">
-                        <!-- Position -->
-                        <div class="space-y-1.5">
-                            <p class="section-label">📍 ตำแหน่ง</p>
-                            <div class="grid grid-cols-3 gap-1.5">
-                                <div><div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div><input type="number" id="tf-pos-x" step="0.1" onchange="setPositionX(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div><input type="number" id="tf-pos-y" step="0.1" onchange="setPositionY(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div><input type="number" id="tf-pos-z" step="0.1" onchange="setPositionZ(this.value)" class="tf-input"></div>
-                            </div>
+                <!-- Position Coordinates -->
+                <div class="space-y-1.5">
+                    <p class="section-label">ตำแหน่งพิกัด</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div>
+                            <input type="number" id="tf-pos-x" step="0.1" onchange="setPositionX(this.value)" class="tf-input">
                         </div>
-                        <!-- Rotation -->
-                        <div class="space-y-1.5">
-                            <p class="section-label">🔄 หมุน (°)</p>
-                            <div class="grid grid-cols-3 gap-1.5">
-                                <div><div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div><input type="number" id="tf-rot-x" step="5" onchange="setRotationX(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div><input type="number" id="tf-rot-y" step="5" onchange="setRotationY(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div><input type="number" id="tf-rot-z" step="5" onchange="setRotationZ(this.value)" class="tf-input"></div>
-                            </div>
-                            <div class="flex space-x-1">
-                                <button onclick="setRotationY(0)"   class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">0°</button>
-                                <button onclick="setRotationY(45)"  class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">45°</button>
-                                <button onclick="setRotationY(90)"  class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">90°</button>
-                                <button onclick="setRotationY(180)" class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">180°</button>
-                                <button onclick="setRotationY(270)" class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all">270°</button>
-                            </div>
+                        <div>
+                            <div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div>
+                            <input type="number" id="tf-pos-y" step="0.1" onchange="setPositionY(this.value)" class="tf-input">
                         </div>
-                        <!-- Scale -->
-                        <div class="space-y-1.5">
-                            <p class="section-label">⚖️ สเกล</p>
-                            <div class="grid grid-cols-3 gap-1.5">
-                                <div><div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div><input type="number" id="tf-scale-x" step="0.05" min="0.05" onchange="setScaleX(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div><input type="number" id="tf-scale-y" step="0.05" min="0.05" onchange="setScaleY(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div><input type="number" id="tf-scale-z" step="0.05" min="0.05" onchange="setScaleZ(this.value)" class="tf-input"></div>
-                            </div>
+                        <div>
+                            <div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div>
+                            <input type="number" id="tf-pos-z" step="0.1" onchange="setPositionZ(this.value)" class="tf-input">
                         </div>
-                        <!-- Dimensions -->
-                        <div class="space-y-1.5">
-                            <p class="section-label">📐 มิติ (เมตร)</p>
-                            <div class="grid grid-cols-3 gap-1.5">
-                                <div><div class="text-[9px] text-white/40 text-center mb-1">กว้าง W</div><input type="number" id="dim-w" step="0.1" min="0.1" onchange="setDimW(this.value)" class="dim-input"></div>
-                                <div><div class="text-[9px] text-white/40 text-center mb-1">สูง H</div><input type="number" id="dim-h" step="0.1" min="0.1" onchange="setDimH(this.value)" class="dim-input"></div>
-                                <div><div class="text-[9px] text-white/40 text-center mb-1">ลึก D</div><input type="number" id="dim-d" step="0.1" min="0.1" onchange="setDimD(this.value)" class="dim-input"></div>
-                            </div>
-                        </div>
-                        <div class="border-t border-white/8"></div>
-                        <!-- Color -->
-                        <div id="control-color" class="hidden space-y-1.5">
-                            <p class="section-label">🎨 สี</p>
-                            <div class="flex items-center space-x-3 bg-white/5 p-2.5 rounded-xl border border-white/5">
-                                <input type="color" id="color-input" oninput="changeSelectedColor(this.value)" class="w-8 h-8 border-0 bg-transparent rounded cursor-pointer outline-none">
-                                <span class="text-xs font-mono" id="color-hex">#FFFFFF</span>
-                            </div>
-                        </div>
-                        <!-- Texture -->
-                        <div id="control-texture" class="hidden space-y-2">
-                            <p class="section-label">🖼️ กราฟิก</p>
-                            <div onclick="document.getElementById('image-file-input').click()"
-                                class="border-2 border-dashed border-white/15 rounded-xl p-3 flex flex-col items-center bg-white/5 hover:bg-white/10 hover:border-cyan-500/40 transition-all cursor-pointer">
-                                <svg class="h-6 w-6 text-white/40 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                <span class="text-[10px] text-white/60">อัปโหลดรูปภาพ</span>
-                                <input type="file" id="image-file-input" class="hidden" accept="image/*" onchange="uploadTexture(this)">
-                            </div>
-                            <div class="grid grid-cols-2 gap-1.5">
-                                <button onclick="applyPresetTexture('sample_naiin')" class="bg-cyan-500/10 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/20 text-[10px] rounded-lg py-1.5 transition-all font-medium">ลายนายอินทร์</button>
-                                <button onclick="applyPresetTexture('sample_kids')"  class="bg-fuchsia-500/10 border border-fuchsia-500/25 text-fuchsia-400 hover:bg-fuchsia-500/20 text-[10px] rounded-lg py-1.5 transition-all font-medium">ลายการ์ตูน</button>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Action Buttons -->
-                    <div class="p-3 border-t border-white/10 bg-white/5 flex space-x-2 flex-shrink-0">
-                        <button onclick="duplicateSelected()" class="flex-1 bg-white/5 hover:bg-white/10 border border-white/15 text-white/70 rounded-xl py-2 text-[11px] font-medium transition-all flex items-center justify-center space-x-1">
-                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                            <span>คัดลอก</span>
-                        </button>
-                        <button onclick="deleteSelectedItem()" class="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl py-2 text-[11px] font-medium transition-all flex items-center justify-center space-x-1">
-                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                            <span>ลบ</span>
-                        </button>
                     </div>
                 </div>
 
-                <!-- ════ LIGHT SELECTED ════════════════════════════════════════ -->
-                <div id="light-selected-panel" class="hidden flex-1 flex flex-col overflow-hidden">
-                    <div class="px-4 py-3 border-b border-yellow-500/20 bg-yellow-500/5 flex items-center justify-between flex-shrink-0">
-                        <div class="min-w-0 mr-2">
-                            <input type="text" id="lp-name" onchange="renameLightEntry(this.value)"
-                                class="text-white font-semibold text-sm bg-transparent outline-none w-full border-b border-transparent focus:border-white/30 transition-all">
+                <!-- Rotation -->
+                <div class="space-y-1.5">
+                    <p class="section-label">มุมหมุนวัตถุ (องศา)</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div>
+                            <input type="number" id="tf-rot-x" step="5" onchange="setRotationX(this.value)" class="tf-input">
                         </div>
-                        <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 flex-shrink-0" id="lp-badge">LIGHT</span>
+                        <div>
+                            <div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div>
+                            <input type="number" id="tf-rot-y" step="5" onchange="setRotationY(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div>
+                            <input type="number" id="tf-rot-z" step="5" onchange="setRotationZ(this.value)" class="tf-input">
+                        </div>
                     </div>
-                    <div class="flex-1 overflow-y-auto p-3 space-y-4">
-
-                        <!-- Color + Intensity -->
-                        <div class="space-y-2">
-                            <p class="section-label">💡 ไฟ</p>
-                            <!-- Color -->
-                            <div id="lp-hemi-group" class="hidden space-y-2">
-                                <div class="flex items-center space-x-2">
-                                    <span class="text-[10px] text-white/50 w-14">Sky 🌤️</span>
-                                    <input type="color" id="lp-sky-color" oninput="setLightSkyColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
-                                </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="text-[10px] text-white/50 w-14">Ground 🌍</span>
-                                    <input type="color" id="lp-gnd-color" oninput="setLightGroundColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
-                                </div>
-                            </div>
-                            <div class="flex items-center space-x-3 bg-white/5 p-2.5 rounded-xl border border-white/5">
-                                <div class="flex items-center space-x-2">
-                                    <span class="text-[9px] text-white/50 w-8">สี</span>
-                                    <input type="color" id="lp-color" oninput="setLightColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
-                                </div>
-                                <div class="flex-1 flex items-center space-x-2">
-                                    <span class="text-[9px] text-white/50 w-12">ความสว่าง</span>
-                                    <input type="range" id="lp-intensity-slider" min="0" max="5" step="0.05" oninput="setLightIntensity(this.value)" class="flex-1 h-1.5">
-                                    <input type="number" id="lp-intensity" step="0.05" min="0" max="20" onchange="setLightIntensity(this.value)" class="w-12 bg-white/5 border border-white/10 rounded px-1 py-1 text-white text-[10px] font-mono text-center focus:outline-none">
-                                </div>
-                            </div>
-                            <!-- Toggles -->
-                            <div class="flex items-center space-x-3 text-[10px] text-white/60">
-                                <label class="flex items-center space-x-1.5 cursor-pointer">
-                                    <input type="checkbox" id="lp-visible" checked onchange="setLightVisible(this.checked)" class="w-3.5 h-3.5 rounded accent-yellow-400">
-                                    <span>มองเห็น</span>
-                                </label>
-                                <label class="flex items-center space-x-1.5 cursor-pointer">
-                                    <input type="checkbox" id="lp-shadow" onchange="setLightShadow(this.checked)" class="w-3.5 h-3.5 rounded accent-yellow-400">
-                                    <span>เงา (Shadow)</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Position -->
-                        <div id="lp-pos-group" class="hidden space-y-1.5">
-                            <p class="section-label">📍 ตำแหน่งแสง</p>
-                            <div class="grid grid-cols-3 gap-1.5">
-                                <div><div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div><input type="number" id="lp-pos-x" step="0.5" onchange="setLightPosX(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div><input type="number" id="lp-pos-y" step="0.5" onchange="setLightPosY(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div><input type="number" id="lp-pos-z" step="0.5" onchange="setLightPosZ(this.value)" class="tf-input"></div>
-                            </div>
-                        </div>
-
-                        <!-- Target -->
-                        <div id="lp-tgt-group" class="hidden space-y-1.5">
-                            <p class="section-label">🎯 เป้าหมาย (Target)</p>
-                            <div class="grid grid-cols-3 gap-1.5">
-                                <div><div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div><input type="number" id="lp-tgt-x" step="0.5" onchange="setLightTgtX(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div><input type="number" id="lp-tgt-y" step="0.5" onchange="setLightTgtY(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div><input type="number" id="lp-tgt-z" step="0.5" onchange="setLightTgtZ(this.value)" class="tf-input"></div>
-                            </div>
-                        </div>
-
-                        <!-- SpotLight -->
-                        <div id="lp-spot-group" class="hidden space-y-1.5">
-                            <p class="section-label">🔦 SpotLight</p>
-                            <div class="grid grid-cols-3 gap-1.5">
-                                <div><div class="text-[9px] text-white/50 text-center mb-1">มุม (°)</div><input type="number" id="lp-angle" step="1" min="1" max="89" onchange="setLightAngle(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-white/50 text-center mb-1">ขอบนุ่ม</div><input type="number" id="lp-penumbra" step="0.05" min="0" max="1" onchange="setLightPenumbra(this.value)" class="tf-input"></div>
-                                <div><div class="text-[9px] text-white/50 text-center mb-1">ระยะ (ม.)</div><input type="number" id="lp-distance" step="1" min="0" onchange="setLightDistance(this.value)" class="tf-input"></div>
-                            </div>
-                        </div>
-
-                        <!-- PointLight -->
-                        <div id="lp-point-group" class="hidden space-y-1.5">
-                            <p class="section-label">💡 PointLight</p>
-                            <div class="flex items-center space-x-3">
-                                <span class="text-[10px] text-white/50 w-16">ระยะ (ม.)</span>
-                                <input type="number" id="lp-dist-p" step="1" min="0" onchange="setLightDistance(this.value)" class="flex-1 tf-input">
-                            </div>
-                        </div>
-
+                    <div class="flex space-x-1 pt-1">
+                        <button onclick="setRotationY(0)"   class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all font-mono">0°</button>
+                        <button onclick="setRotationY(45)"  class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all font-mono">45°</button>
+                        <button onclick="setRotationY(90)"  class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all font-mono">90°</button>
+                        <button onclick="setRotationY(180)" class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all font-mono">180°</button>
+                        <button onclick="setRotationY(270)" class="flex-1 bg-white/5 border border-white/10 text-white/50 rounded-md py-1 text-[9px] hover:bg-white/10 transition-all font-mono">270°</button>
                     </div>
-                    <!-- Delete Light -->
-                    <div class="p-3 border-t border-white/10 bg-white/5 flex-shrink-0">
-                        <button onclick="deleteSelectedItem()"
-                            class="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl py-2 text-[11px] font-medium transition-all">
-                            🗑️ ลบแสงนี้
-                        </button>
+                </div>
+
+                <!-- Scale factors -->
+                <div class="space-y-1.5">
+                    <p class="section-label">มาตราส่วน (Scale Factor)</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div>
+                            <input type="number" id="tf-scale-x" step="0.05" min="0.05" onchange="setScaleX(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div>
+                            <input type="number" id="tf-scale-y" step="0.05" min="0.05" onchange="setScaleY(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div>
+                            <input type="number" id="tf-scale-z" step="0.05" min="0.05" onchange="setScaleZ(this.value)" class="tf-input">
+                        </div>
                     </div>
+                </div>
+
+                <!-- Dimensions in Meters -->
+                <div class="space-y-1.5">
+                    <p class="section-label">ขนาดมิติจริง (เมตร)</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <div class="text-[9px] text-white/40 text-center mb-1">กว้าง W</div>
+                            <input type="number" id="dim-w" step="0.1" min="0.1" onchange="setDimW(this.value)" class="dim-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-white/40 text-center mb-1">สูง H</div>
+                            <input type="number" id="dim-h" step="0.1" min="0.1" onchange="setDimH(this.value)" class="dim-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-white/40 text-center mb-1">ลึก D</div>
+                            <input type="number" id="dim-d" step="0.1" min="0.1" onchange="setDimD(this.value)" class="dim-input">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Color control (Table, cashier, bookshelf) -->
+                <div id="control-color" class="hidden space-y-1.5 pt-1">
+                    <p class="section-label">เฉดสีวัตถุ</p>
+                    <div class="flex items-center space-x-3 bg-white/5 p-2.5 rounded-xl border border-white/5">
+                        <input type="color" id="color-input" oninput="changeSelectedColor(this.value)" class="w-8 h-8 border-0 bg-transparent rounded cursor-pointer outline-none">
+                        <span class="text-xs font-mono" id="color-hex">#FFFFFF</span>
+                    </div>
+                </div>
+
+                <!-- Graphics Texture Upload (backdrop, rollup) -->
+                <div id="control-texture" class="hidden space-y-2 pt-1">
+                    <p class="section-label">กราฟิกลวดลายพื้นผิว</p>
+                    <div onclick="document.getElementById('image-file-input').click()"
+                        class="border-2 border-dashed border-white/10 hover:border-cyan-500/30 rounded-xl p-4 flex flex-col items-center bg-white/5 hover:bg-white/10 transition-all cursor-pointer">
+                        <svg class="h-6 w-6 text-white/35 mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                        <span class="text-[10px] text-white/50">คลิกเพื่ออัปโหลดไฟล์รูปภาพ</span>
+                        <input type="file" id="image-file-input" class="hidden" accept="image/*" onchange="uploadTexture(this)">
+                    </div>
+                    <!-- Recommendation Info Banner (Dynamic in JS) -->
+                    <p id="graphic-recommendation" class="text-[10px] text-cyan-400/80 font-medium text-center mt-1"></p>
+                </div>
+
+                <!-- Actions buttons inside properties -->
+                <div class="flex space-x-2 pt-2">
+                    <button onclick="duplicateSelected()" class="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 rounded-xl py-2 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/>
+                        </svg>
+                        <span>คัดลอกวัตถุ</span>
+                    </button>
+                    <button onclick="deleteSelectedItem()" class="flex-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl py-2 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <span>ลบวัตถุ</span>
+                    </button>
                 </div>
             </div>
-        </aside>
-    </div>
 
-    <!-- ── FOOTER ──────────────────────────────────────────────────────── -->
-    <footer class="pointer-events-auto flex items-center justify-between bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-3 flex-shrink-0">
-        <div class="flex items-center space-x-3 text-xs text-white/50">
-            <span>พื้นที่: <span class="text-cyan-400 font-mono" id="ui-current-dimensions-f">—</span></span>
+            <!-- ── LIGHT SELECTED PROPERTIES ── -->
+            <div id="light-selected-panel" class="hidden flex flex-col p-4 space-y-4">
+                <!-- Title, Rename, Badge -->
+                <div class="flex items-center justify-between pb-2 border-b border-yellow-500/20 bg-yellow-500/5 px-2.5 py-1.5 rounded-xl">
+                    <input type="text" id="lp-name" onchange="renameLightEntry(this.value)"
+                        class="text-white font-semibold text-sm bg-transparent outline-none w-full border-b border-transparent focus:border-white/30 transition-all font-sans">
+                    <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 flex-shrink-0" id="lp-badge">LIGHT</span>
+                </div>
+
+                <!-- Light Source Properties -->
+                <div class="space-y-2">
+                    <p class="section-label">ปรับค่าระดับแสง</p>
+                    
+                    <!-- Sky/Ground color (Only for Hemisphere) -->
+                    <div id="lp-hemi-group" class="hidden space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[10px] text-white/50 w-16">Sky Color</span>
+                            <input type="color" id="lp-sky-color" oninput="setLightSkyColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[10px] text-white/50 w-16">Ground Color</span>
+                            <input type="color" id="lp-gnd-color" oninput="setLightGroundColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
+                        </div>
+                    </div>
+                    
+                    <!-- Color & Intensity -->
+                    <div class="flex items-center space-x-3 bg-white/5 p-2 rounded-xl border border-white/5">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[9px] text-white/50">สี</span>
+                            <input type="color" id="lp-color" oninput="setLightColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
+                        </div>
+                        <div class="flex-1 flex items-center space-x-2">
+                            <span class="text-[9px] text-white/50">ความสว่าง</span>
+                            <input type="range" id="lp-intensity-slider" min="0" max="5" step="0.05" oninput="setLightIntensity(this.value)" class="flex-1 h-1.5">
+                            <input type="number" id="lp-intensity" step="0.05" min="0" max="20" onchange="setLightIntensity(this.value)" class="w-12 bg-white/5 border border-white/10 rounded px-1 py-0.5 text-white text-[10px] font-mono text-center focus:outline-none">
+                        </div>
+                    </div>
+                    
+                    <!-- Visibility / Shadow Toggles -->
+                    <div class="flex items-center space-x-4 text-[10px] text-white/60 pt-1">
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="checkbox" id="lp-visible" checked onchange="setLightVisible(this.checked)" class="w-3.5 h-3.5 rounded accent-yellow-400">
+                            <span>เปิดแสงไฟ</span>
+                        </label>
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="checkbox" id="lp-shadow" onchange="setLightShadow(this.checked)" class="w-3.5 h-3.5 rounded accent-yellow-400">
+                            <span>แสดงเงาตกกระทบ</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Position Coordinates for Light -->
+                <div id="lp-pos-group" class="hidden space-y-1.5">
+                    <p class="section-label">ตำแหน่งของแสงไฟ</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div>
+                            <input type="number" id="lp-pos-x" step="0.5" onchange="setLightPosX(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div>
+                            <input type="number" id="lp-pos-y" step="0.5" onchange="setLightPosY(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div>
+                            <input type="number" id="lp-pos-z" step="0.5" onchange="setLightPosZ(this.value)" class="tf-input">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Light Target Target coords -->
+                <div id="lp-tgt-group" class="hidden space-y-1.5">
+                    <p class="section-label">เป้าหมายมุมส่อง (Target)</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <div class="text-[9px] text-red-400 font-bold text-center mb-1">X</div>
+                            <input type="number" id="lp-tgt-x" step="0.5" onchange="setLightTgtX(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-green-400 font-bold text-center mb-1">Y</div>
+                            <input type="number" id="lp-tgt-y" step="0.5" onchange="setLightTgtY(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-blue-400 font-bold text-center mb-1">Z</div>
+                            <input type="number" id="lp-tgt-z" step="0.5" onchange="setLightTgtZ(this.value)" class="tf-input">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Spotlight parameters -->
+                <div id="lp-spot-group" class="hidden space-y-1.5">
+                    <p class="section-label">สเปคไฟ Spotlight</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <div class="text-[9px] text-white/50 text-center mb-1">มุมแสง (°)</div>
+                            <input type="number" id="lp-angle" step="1" min="1" max="89" onchange="setLightAngle(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-white/50 text-center mb-1">ขอบนุ่ม</div>
+                            <input type="number" id="lp-penumbra" step="0.05" min="0" max="1" onchange="setLightPenumbra(this.value)" class="tf-input">
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-white/50 text-center mb-1">ระยะส่อง(ม)</div>
+                            <input type="number" id="lp-distance" step="1" min="0" onchange="setLightDistance(this.value)" class="tf-input">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pointlight parameters -->
+                <div id="lp-point-group" class="hidden space-y-1.5">
+                    <p class="section-label">สเปคไฟ PointLight</p>
+                    <div class="flex items-center space-x-3">
+                        <span class="text-[10px] text-white/50 w-16">ระยะแสง (ม.)</span>
+                        <input type="number" id="lp-dist-p" step="1" min="0" onchange="setLightDistance(this.value)" class="flex-1 tf-input">
+                    </div>
+                </div>
+
+                <!-- Delete Light Button -->
+                <div class="pt-2">
+                    <button onclick="deleteSelectedItem()"
+                        class="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl py-2.5 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <span>ลบไฟนี้ออก</span>
+                    </button>
+                </div>
+            </div>
+
         </div>
-        <div class="flex space-x-2">
+
+        <!-- ── BOTTOM GLOBAL TOOLS SECTION (ALWAYS VISIBLE) ──────────────────── -->
+        <div class="p-4 border-t border-white/5 bg-black/20 flex flex-col gap-2 flex-shrink-0">
+            <!-- Snap coordinates toggle -->
             <button id="snap-toggle-btn"
-                onclick="window.gridSnapEnabled=!window.gridSnapEnabled;this.textContent=window.gridSnapEnabled?'⊞ Snap: ON':'⊟ Snap: OFF'"
-                class="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/30 rounded-xl px-3 py-1.5 text-[11px] font-medium transition-all text-cyan-400/80">
-                ⊞ Snap: ON
+                onclick="window.gridSnapEnabled=!window.gridSnapEnabled;this.classList.toggle('bg-cyan-500/15', window.gridSnapEnabled);this.classList.toggle('text-cyan-300', window.gridSnapEnabled);this.classList.toggle('border-cyan-500/30', window.gridSnapEnabled);"
+                class="w-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/30 rounded-xl py-2.5 text-[11px] font-semibold transition-all text-white/70 flex items-center justify-center space-x-2">
+                <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 12h16M4 18h16M12 4v16" />
+                </svg>
+                <span>จัดยึดตามกริด (Snap: On)</span>
             </button>
-            <button onclick="clearAllWorkspace()"
-                class="bg-white/5 hover:bg-red-500/15 hover:text-red-400 border border-white/10 hover:border-red-500/30 rounded-xl px-3 py-1.5 text-[11px] font-medium transition-all text-white/60">
-                ล้างทั้งหมด
-            </button>
-            <button onclick="captureMockup()"
-                class="bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl px-4 py-1.5 text-[11px] tracking-wider transition-all shadow-[0_0_15px_rgba(6,182,212,.35)]">
-                📷 Export PNG
-            </button>
+
+            <div class="grid grid-cols-2 gap-2">
+                <!-- Clear Workspace -->
+                <button onclick="clearAllWorkspace()"
+                    class="bg-white/5 hover:bg-red-500/15 hover:text-red-400 border border-white/10 hover:border-red-500/20 rounded-xl py-2.5 text-[11px] font-semibold transition-all text-white/60 flex items-center justify-center space-x-1">
+                    <span>ล้างพื้นที่</span>
+                </button>
+                <!-- Export Mockup PNG -->
+                <button onclick="captureMockup()"
+                    class="bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl py-2.5 text-[11px] tracking-wider transition-all shadow-[0_0_15px_rgba(6,182,212,.25)] flex items-center justify-center space-x-1">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    <span>ส่งออก PNG</span>
+                </button>
+            </div>
         </div>
-    </footer>
+    </aside>
 </div>
 
-<!-- ── Tailwind reusable component classes (inline apply) ─────────────── -->
+<!-- ── Tailwind reusable asset styles ────────────────── -->
 <style>
-.asset-btn{width:100%;display:flex;align-items:center;padding:.625rem;border-radius:.75rem;border-width:1px;border-color:rgba(255,255,255,.04);background:rgba(255,255,255,.04);cursor:pointer;transition:all .15s}
-.asset-btn:hover{background:rgba(255,255,255,.1);border-color:rgba(6,182,212,.4);}
-.asset-icon{width:2.25rem;height:2.25rem;background:rgba(255,255,255,.05);border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.125rem;flex-shrink:0;transition:transform .15s}
-.asset-btn:hover .asset-icon{transform:scale(1.08);}
-.tf-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:.5rem;padding:.375rem .25rem;color:#fff;font-size:11px;font-family:monospace;text-align:center;outline:none;transition:border-color .15s;}
-.tf-input:focus{border-color:rgba(6,182,212,.6);}
-.dim-input{width:100%;background:rgba(6,182,212,.04);border:1px solid rgba(6,182,212,.2);border-radius:.5rem;padding:.375rem .25rem;color:rgb(103,232,249);font-size:11px;font-family:monospace;text-align:center;outline:none;transition:border-color .15s;}
-.dim-input:focus{border-color:rgba(6,182,212,.7);}
+.asset-btn{width:100%;display:flex;align-items:center;padding:.6rem;border-radius:.75rem;border-width:1px;border-color:rgba(255,255,255,.04);background:rgba(255,255,255,.04);cursor:pointer;transition:all .15s}
+.asset-btn:hover{background:rgba(255,255,255,.08);border-color:rgba(6,182,212,.3);}
+.asset-icon{width:2.25rem;height:2.25rem;background:rgba(255,255,255,.05);border-radius:.5rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s}
+.asset-btn:hover .asset-icon{transform:scale(1.06);}
+.tf-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:.5rem;padding:.375rem .25rem;color:#fff;font-size:11px;font-family:monospace;text-align:center;outline:none;transition:border-color .15s;}
+.tf-input:focus{border-color:rgba(6,182,212,.5);}
+.dim-input{width:100%;background:rgba(6,182,212,.03);border:1px solid rgba(6,182,212,.15);border-radius:.5rem;padding:.375rem .25rem;color:rgb(103,232,249);font-size:11px;font-family:monospace;text-align:center;outline:none;transition:border-color .15s;}
+.dim-input:focus{border-color:rgba(6,182,212,.6);}
+
+body.light-mode .asset-btn { border-color: rgba(0,0,0,.04); background: rgba(0,0,0,.03); }
+body.light-mode .asset-btn:hover { background: rgba(0,0,0,.06); border-color: rgba(6,182,212,.2); }
+body.light-mode .asset-icon { background: rgba(0,0,0,.04); }
+body.light-mode .asset-icon svg { color: rgba(0,0,0,.6); }
+body.light-mode .tf-input { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.08); color: #000; }
+body.light-mode .tf-input:focus { border-color: rgba(6,182,212,.4); }
+body.light-mode .dim-input { background: rgba(6,182,212,.04); border-color: rgba(6,182,212,.2); color: rgb(8,145,178); }
+body.light-mode .dim-input:focus { border-color: rgba(6,182,212,.5); }
 </style>
 
 </body>
