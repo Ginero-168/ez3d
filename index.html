@@ -8,10 +8,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','sans-serif'] } } } }
-    </script>
     <style>
         /* ── Light Mode ────────────────────────────────────────────── */
         body.light-mode { background:#f2ede4!important; }
@@ -170,11 +166,8 @@
             transform: translateX(-50%) scale(1);
         }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script type="module" crossorigin src="./assets/index-BuhUTTjQ.js"></script>
+  <script type="module" crossorigin src="./assets/index-BmiQctD0.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DDrGD1CB.css">
 </head>
 <body class="bg-[#0b0c10] text-[#c5c6c7] font-sans h-screen w-screen overflow-hidden select-none">
 
@@ -236,7 +229,7 @@
 </div>
 
 <!-- ═══ 3D CANVAS ═══════════════════════════════════════════════════════════ -->
-<canvas id="canvas3d" class="absolute inset-0 w-full h-full z-0 block outline-none"></canvas>
+<canvas id="canvas3d" class="absolute inset-0 w-full h-full z-0 block outline-none" tabindex="0"></canvas>
 
 <!-- ═══ MAIN FLOATING UI ═════════════════════════════════════════════════════ -->
 <div id="main-ui" class="hidden absolute inset-0 pointer-events-none z-10">
@@ -275,10 +268,17 @@
             </div>
             <div class="w-8 h-px bg-white/10 my-1"></div>
             
-            <!-- Assets Toggle Button -->
-            <button id="tab-btn-assets" onclick="toggleLeftPanel('assets')" class="toolbar-btn text-white/50 hover:text-white" title="เพิ่มวัตถุและไฟ (Assets)">
+            <!-- Objects Toggle Button -->
+            <button id="tab-btn-objects" onclick="toggleLeftPanel('objects')" class="toolbar-btn text-white/50 hover:text-white" title="เพิ่มวัตถุ (Objects)">
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+            </button>
+
+            <!-- Lights Toggle Button -->
+            <button id="tab-btn-lights" onclick="toggleLeftPanel('lights')" class="toolbar-btn text-white/50 hover:text-white" title="ตั้งค่าแสงไฟ (Lights)">
+                <svg class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
             </button>
             
@@ -314,13 +314,6 @@
             </button>
             
             <div class="w-8 h-px bg-white/10 my-0.5"></div>
-
-            <!-- Auto Rotate -->
-            <button id="btn-auto-rotate" onclick="toggleAutoRotate()" class="toolbar-btn text-white/50 hover:text-white" title="หมุนกล้องอัตโนมัติ">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89" />
-                </svg>
-            </button>
             
             <!-- Theme Toggle -->
             <button id="light-mode-btn" onclick="toggleLightMode()" class="toolbar-btn text-white/50 hover:text-white" title="เปลี่ยนโหมดสี (Theme)">
@@ -358,8 +351,34 @@
         <!-- Panel Contents Wrapper -->
         <div class="flex-1 overflow-y-auto min-h-0">
             
-            <!-- ── PANEL: ASSETS ── -->
-            <div id="panel-assets" class="p-3 space-y-4 hidden">
+            <!-- ── PANEL: OBJECTS ── -->
+            <div id="panel-objects" class="p-3 space-y-4 hidden">
+                <!-- Layout templates -->
+                <div class="space-y-1.5">
+                    <p class="section-label">เทมเพลตจัดวาง</p>
+                    <div class="grid grid-cols-1 gap-1.5">
+                        <button onclick="applyLayoutTemplate('roadshow')" class="asset-btn">
+                            <div class="asset-icon">
+                                <svg class="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7h18M5 7v12h14V7M8 11h2m2 0h2m2 0h2M8 15h2m2 0h2m2 0h2" />
+                                </svg>
+                            </div>
+                            <div class="ml-2.5 min-w-0 text-left">
+                                <span class="text-white font-medium block text-xs">Roadshow Book Wall</span>
+                                <span class="text-[10px] text-white/35">โต๊ะ + ชั้นวาง + แคชเชียร์</span>
+                            </div>
+                        </button>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button onclick="applyLayoutTemplate('booth3x3')" class="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-cyan-500/30 rounded-xl py-2 px-2 text-[10px] font-semibold text-white/70 transition-all text-left">
+                                Booth 3x3
+                            </button>
+                            <button onclick="applyLayoutTemplate('cashierFlow')" class="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-cyan-500/30 rounded-xl py-2 px-2 text-[10px] font-semibold text-white/70 transition-all text-left">
+                                Cashier Flow
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Objects section -->
                 <div class="space-y-1.5">
                     <p class="section-label">วัตถุมาตรฐาน</p>
@@ -436,9 +455,12 @@
                         <input type="file" id="gltf-file-input" class="hidden" accept=".gltf,.glb" onchange="loadGLTFObject(this.files[0])">
                     </button>
                 </div>
+            </div>
 
+            <!-- ── PANEL: LIGHTS ── -->
+            <div id="panel-lights" class="p-3 space-y-4 hidden">
                 <!-- Lights section -->
-                <div class="space-y-1.5 pt-1">
+                <div class="space-y-1.5">
                     <p class="section-label">เพิ่มแสงไฟ</p>
                     <div class="grid grid-cols-2 gap-1.5">
                         <button onclick="addLight('ambient')"
@@ -503,16 +525,6 @@
                             class="w-full text-left px-3 py-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all text-[10px] text-white/70 font-medium">
                             Moody — Single Warm Lamp
                         </button>
-                    </div>
-                </div>
-
-                <!-- Camera Controls -->
-                <div class="space-y-1.5 pt-1">
-                    <p class="section-label">มุมมองกล้อง</p>
-                    <div class="flex space-x-1.5">
-                        <button onclick="setCameraAngle('top')"          class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] font-medium hover:bg-white/10 hover:border-cyan-400/50 transition-all">แปลน</button>
-                        <button onclick="setCameraAngle('isometric_left')"  class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] font-medium hover:bg-white/10 hover:border-cyan-400/50 transition-all">ซ้าย</button>
-                        <button onclick="setCameraAngle('isometric_right')" class="flex-1 bg-white/5 border border-white/10 text-white/80 rounded-lg py-1.5 text-[10px] font-medium hover:bg-white/10 hover:border-cyan-400/50 transition-all">ขวา</button>
                     </div>
                 </div>
             </div>
@@ -752,11 +764,11 @@
                     <div id="lp-hemi-group" class="hidden space-y-2">
                         <div class="flex items-center space-x-2">
                             <span class="text-[10px] text-white/50 w-16">Sky Color</span>
-                            <input type="color" id="lp-sky-color" oninput="setLightSkyColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
+                            <input type="color" id="lp-sky-color" oninput="setLightSkyColor(this.value, false)" onchange="commitLightUndo()" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
                         </div>
                         <div class="flex items-center space-x-2">
                             <span class="text-[10px] text-white/50 w-16">Ground Color</span>
-                            <input type="color" id="lp-gnd-color" oninput="setLightGroundColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
+                            <input type="color" id="lp-gnd-color" oninput="setLightGroundColor(this.value, false)" onchange="commitLightUndo()" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
                         </div>
                     </div>
                     
@@ -764,11 +776,11 @@
                     <div class="flex items-center space-x-3 bg-white/5 p-2 rounded-xl border border-white/5">
                         <div class="flex items-center space-x-2">
                             <span class="text-[9px] text-white/50">สี</span>
-                            <input type="color" id="lp-color" oninput="setLightColor(this.value)" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
+                            <input type="color" id="lp-color" oninput="setLightColor(this.value, false)" onchange="commitLightUndo()" class="w-7 h-7 border-0 bg-transparent rounded cursor-pointer outline-none">
                         </div>
                         <div class="flex-1 flex items-center space-x-2">
                             <span class="text-[9px] text-white/50">ความสว่าง</span>
-                            <input type="range" id="lp-intensity-slider" min="0" max="5" step="0.05" oninput="setLightIntensity(this.value)" class="flex-1 h-1.5">
+                            <input type="range" id="lp-intensity-slider" min="0" max="5" step="0.05" onpointerdown="beginLightUndo()" oninput="setLightIntensity(this.value, false)" onchange="commitLightUndo()" class="flex-1 h-1.5">
                             <input type="number" id="lp-intensity" step="0.05" min="0" max="20" onchange="setLightIntensity(this.value)" class="w-12 bg-white/5 border border-white/10 rounded px-1 py-0.5 text-white text-[10px] font-mono text-center focus:outline-none">
                         </div>
                     </div>
@@ -885,12 +897,12 @@
 
             <!-- Snap coordinates toggle -->
             <button id="snap-toggle-btn"
-                onclick="window.gridSnapEnabled=!window.gridSnapEnabled;this.classList.toggle('bg-cyan-500/15', window.gridSnapEnabled);this.classList.toggle('text-cyan-300', window.gridSnapEnabled);this.classList.toggle('border-cyan-500/30', window.gridSnapEnabled);"
+                onclick="toggleGridSnap()"
                 class="w-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/30 rounded-xl py-2.5 text-[11px] font-semibold transition-all text-white/70 flex items-center justify-center space-x-2">
                 <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 12h16M4 18h16M12 4v16" />
                 </svg>
-                <span>จัดยึดตามกริด (Snap: On)</span>
+                <span id="snap-toggle-text">จัดยึดตามกริด (Snap: ON)</span>
             </button>
 
             <!-- Turbo Mode Toggle -->
@@ -918,11 +930,29 @@
                     <span>ส่งออก PNG</span>
                 </button>
             </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="downloadProjectFile()"
+                    class="bg-white/5 hover:bg-emerald-500/15 hover:text-emerald-300 border border-white/10 hover:border-emerald-500/25 rounded-xl py-2.5 text-[11px] font-semibold transition-all text-white/60 flex items-center justify-center space-x-1">
+                    <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3M6 21h12a2 2 0 002-2V7l-4-4H6a2 2 0 00-2 2v14a2 2 0 002 2zm8-18v5h5" />
+                    </svg>
+                    <span>บันทึกโปรเจกต์</span>
+                </button>
+                <button onclick="document.getElementById('project-file-input').click()"
+                    class="bg-white/5 hover:bg-cyan-500/15 hover:text-cyan-300 border border-white/10 hover:border-cyan-500/25 rounded-xl py-2.5 text-[11px] font-semibold transition-all text-white/60 flex items-center justify-center space-x-1">
+                    <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m0-12l-4 4m4-4l4 4" />
+                    </svg>
+                    <span>โหลดโปรเจกต์</span>
+                </button>
+                <input type="file" id="project-file-input" class="hidden" accept=".json,.ez3d.json,application/json" onchange="loadProjectFile(this.files[0]); this.value = '';">
+            </div>
         </div>
     </aside>
     
-    <!-- ── BOTTOM-CENTER FLOATING GIZMO MODE SELECTOR ──────────────────────── -->
-    <div id="gizmo-toolbar" class="hidden fixed left-1/2 -translate-x-1/2 bottom-6 floating-card bg-black/35 backdrop-blur-md rounded-2xl p-1.5 shadow-2xl border border-white/5 flex gap-1 z-30 pointer-events-auto">
+    <!-- ── TOP-CENTER FLOATING GIZMO MODE SELECTOR ────────────────────────── -->
+    <div id="gizmo-toolbar" class="hidden fixed left-1/2 -translate-x-1/2 top-4 floating-card bg-black/35 backdrop-blur-md rounded-2xl p-1.5 shadow-2xl border border-white/5 flex gap-1 z-30 pointer-events-auto">
         <button id="gizmo-mode-translate" onclick="setGizmoMode('translate')" class="gizmo-btn active" title="เครื่องมือย้ายตำแหน่ง (W)">
             <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7l4-4m0 0l4 4m-4-4v18" />
@@ -940,6 +970,30 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
             </svg>
             <span class="text-[10px] font-bold ml-1.5">สเกล (R)</span>
+        </button>
+    </div>
+
+    <!-- ── BOTTOM-CENTER FLOATING CAMERA & AUTOMATION SELECTOR ──────────────── -->
+    <div id="camera-toolbar" class="fixed left-1/2 -translate-x-1/2 bottom-6 floating-card bg-black/35 backdrop-blur-md rounded-2xl p-1.5 shadow-2xl border border-white/5 flex items-center gap-1 z-30 pointer-events-auto">
+        <button id="btn-auto-rotate-bottom" onclick="toggleAutoRotate()" class="gizmo-btn" title="หมุนกล้องอัตโนมัติ (A)">
+            <svg class="w-4 h-4 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89" />
+            </svg>
+            <span class="text-[10px] font-bold ml-1.5">หมุนอัตโนมัติ (A)</span>
+        </button>
+        
+        <div class="w-px h-5 bg-white/10 mx-1"></div>
+        
+        <span class="text-[10px] text-white/40 font-bold px-1">มุมกล้อง:</span>
+        
+        <button id="cam-angle-top" onclick="setCameraAngle('top')" class="gizmo-btn" title="มุมมองจากด้านบน">
+            <span class="text-[10px] font-bold">แปลน (Top)</span>
+        </button>
+        <button id="cam-angle-left" onclick="setCameraAngle('isometric_left')" class="gizmo-btn active" title="มุมมองไอโซเมตริกซ้าย">
+            <span class="text-[10px] font-bold">ซ้าย (Isometric L)</span>
+        </button>
+        <button id="cam-angle-right" onclick="setCameraAngle('isometric_right')" class="gizmo-btn" title="มุมมองไอโซเมตริกขวา">
+            <span class="text-[10px] font-bold">ขวา (Isometric R)</span>
         </button>
     </div>
 </div>
@@ -1009,6 +1063,13 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89" />
                     </svg>
                     <span class="text-[10px] font-bold ml-1.5">หมุนอัตโนมัติ</span>
+                </button>
+
+                <button onclick="downloadProposalSummary()" class="gizmo-btn" title="ส่งออกข้อเสนอเป็น HTML">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m0 0l-4-4m4 4l4-4" />
+                    </svg>
+                    <span class="text-[10px] font-bold ml-1.5">ส่งออกข้อเสนอ</span>
                 </button>
 
                 <button onclick="toggleProposalMode()" class="gizmo-btn bg-red-500/10 hover:bg-red-500/20 border-red-500/20 text-red-400" title="ออกจากการนำเสนอ">
