@@ -1,6 +1,18 @@
 {
   "version": 1,
   "skills": {
+    "3d-web-experience": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/3d-web-experience/SKILL.md",
+      "computedHash": "abf349a30764951de0ff17fe6e4b0d3a5332d3682b3b97109d7a23f813406d1a"
+    },
+    "caveman": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "dfbf85749fd474feeb0bbe60c779795ecd5dbec0083299b56e68916bc3ddd8c9"
+    },
     "debug-mantra": {
       "source": "thananon/9arm-skills",
       "sourceType": "github",
@@ -12,6 +24,12 @@
       "sourceType": "github",
       "skillPath": "skills/find-skills/SKILL.md",
       "computedHash": "9e1c8b3103f92fa8092568a44fe64858de7c5c9dc65ce4bea8f168080e889cfd"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
     },
     "management-talk": {
       "source": "thananon/9arm-skills",
@@ -30,6 +48,12 @@
       "sourceType": "github",
       "skillPath": "skills/engineering/scrutinize/SKILL.md",
       "computedHash": "d82a0b76617a00069f972cd0efd57c591e18b56f7aa0652aec63f6cb37cfd735"
+    },
+    "webapp-testing": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/webapp-testing/SKILL.md",
+      "computedHash": "ad5b1fc52807e9afa4635e59218a026b164dc58b6c3f41b0f7c644dcd6ccf572"
     }
   }
 }
