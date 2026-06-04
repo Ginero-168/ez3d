@@ -49,6 +49,12 @@ async function run() {
     await page.waitForTimeout(1500);
 
     await page.locator('#tab-btn-objects').click();
+    await page.evaluate(() => window.applyLayoutTemplate('booth3x3', true));
+    await page.locator('#tab-btn-layers').click();
+    const templateLayerText = await page.locator('#layer-list').innerText();
+    if (!templateLayerText.includes('โรลอัป')) throw new Error('Template did not add rollup assets.');
+
+    await page.locator('#tab-btn-objects').click();
     await page.locator("button[onclick=\"spawnItem('table')\"]").click();
     await page.locator('#tab-btn-layers').click();
     const layerText = await page.locator('#layer-list').innerText();
@@ -79,6 +85,15 @@ async function run() {
     });
     if (!restoredLayerText.includes('โต๊ะ #1')) throw new Error('Project load did not restore table.');
     if (!restoredLayerText.includes('Point Light')) throw new Error('Project load did not restore point light.');
+
+    await page.evaluate(() => window.toggleProposalMode());
+    await page.waitForTimeout(100);
+    const downloadPromise = page.waitForEvent('download');
+    await page.evaluate(() => window.downloadProposalSummary());
+    const download = await downloadPromise;
+    if (!download.suggestedFilename().endsWith('.html')) {
+      throw new Error(`Proposal export filename was not HTML: ${download.suggestedFilename()}`);
+    }
 
     if (errors.length) throw new Error(`Page errors:\n${errors.join('\n')}`);
   } finally {

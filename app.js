@@ -1238,6 +1238,87 @@ function clearAllWorkspace() {
     _refreshUndoRedo();
 }
 
+const LAYOUT_TEMPLATES = {
+    roadshow: {
+        name: 'Roadshow Book Wall',
+        objects: [
+            { type: 'backdrop', position: [0, 1.25, null] },
+            { type: 'cashier', position: [-5, 0, 4], rotationY: 0 },
+            { type: 'table', position: [-3, 0, 1.8] },
+            { type: 'table', position: [0, 0, 1.8] },
+            { type: 'table', position: [3, 0, 1.8] },
+            { type: 'bookshelf', position: [-5, 0, -1.4] },
+            { type: 'bookshelf', position: [-2.5, 0, -1.4] },
+            { type: 'bookshelf', position: [2.5, 0, -1.4] },
+            { type: 'bookshelf', position: [5, 0, -1.4] },
+            { type: 'rollup', position: [6, 1.04, 3.8] },
+        ],
+        carpet: '#1e3a8a',
+        lightPreset: 'exhibition',
+    },
+    booth3x3: {
+        name: 'Booth 3x3 Focus',
+        objects: [
+            { type: 'backdrop', position: [0, 1.25, null], scale: [0.22, 1, 1] },
+            { type: 'table', position: [0, 0, 0.6] },
+            { type: 'rollup', position: [-1.1, 1.04, -0.6] },
+            { type: 'rollup', position: [1.1, 1.04, -0.6] },
+        ],
+        carpet: '#374151',
+        lightPreset: 'studio',
+    },
+    cashierFlow: {
+        name: 'Cashier Flow',
+        objects: [
+            { type: 'backdrop', position: [0, 1.25, null] },
+            { type: 'cashier', position: [0, 0, 3.8] },
+            { type: 'table', position: [-4, 0, 0.8] },
+            { type: 'table', position: [4, 0, 0.8] },
+            { type: 'bookshelf', position: [-4.5, 0, -2] },
+            { type: 'bookshelf', position: [0, 0, -2] },
+            { type: 'bookshelf', position: [4.5, 0, -2] },
+            { type: 'rollup', position: [-6, 1.04, 3.2] },
+            { type: 'rollup', position: [6, 1.04, 3.2] },
+        ],
+        carpet: '#15803d',
+        lightPreset: 'daylight',
+    },
+};
+
+function _applyTemplateObject(spec) {
+    const obj = spawnItem(spec.type, false);
+    if (!obj) return null;
+    const pos = spec.position || [0, 0, 0];
+    obj.position.set(
+        pos[0] ?? 0,
+        pos[1] ?? obj.position.y,
+        pos[2] === null ? -spaceLength / 2 + 0.075 : (pos[2] ?? 0)
+    );
+    if (spec.rotationY !== undefined) obj.rotation.y = THREE.MathUtils.degToRad(spec.rotationY);
+    if (spec.scale) obj.scale.fromArray(spec.scale);
+    return obj;
+}
+
+function applyLayoutTemplate(templateKey, skipConfirm = false) {
+    const template = LAYOUT_TEMPLATES[templateKey];
+    if (!template) return;
+    if (!skipConfirm && draggableObjects.length > 0 && !confirm(`ใช้เทมเพลต ${template.name} และแทนที่วัตถุ/ไฟในฉากปัจจุบัน?`)) return;
+
+    _clearSceneContent();
+    template.objects.forEach(_applyTemplateObject);
+    if (template.carpet) {
+        floorTiles.forEach(tile => _setTileColor(tile.idx, template.carpet));
+        if (floorTilesMesh?.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
+    }
+    if (template.lightPreset) applyLightPreset(template.lightPreset);
+    deselectObject();
+    updateLayerList();
+    updateUI();
+    _undoStack = [];
+    _redoStack = [];
+    _refreshUndoRedo();
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // LIGHTING SYSTEM
 // ══════════════════════════════════════════════════════════════════════════
@@ -2578,7 +2659,25 @@ function updateProposalInventory() {
     const list = document.getElementById('prop-assets-list');
     if (!list) return;
     list.innerHTML = '';
-    
+
+    const items = collectProposalInventory();
+    if (items.length === 0) {
+        list.innerHTML = `<div class="text-white/30 text-center py-2">ไม่มีวัตถุในห้องจัดแสดง</div>`;
+        return;
+    }
+
+    items.forEach(({ name, count }) => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 border-b border-white/5 last:border-b-0';
+        row.innerHTML = `
+            <span class="text-white/80 truncate pr-2">${name}</span>
+            <span class="font-bold text-cyan-400">x${count}</span>
+        `;
+        list.appendChild(row);
+    });
+}
+
+function collectProposalInventory() {
     const counts = {};
     const typeNames = {
         backdrop: 'แบคดรอปผนัง (Backdrop)',
@@ -2604,29 +2703,35 @@ function updateProposalInventory() {
     }
     
     draggableObjects.forEach(o => scan(o));
-    
-    const items = Object.entries(counts);
-    if (items.length === 0) {
-        list.innerHTML = `<div class="text-white/30 text-center py-2">ไม่มีวัตถุในห้องจัดแสดง</div>`;
-        return;
-    }
-    
-    items.forEach(([name, count]) => {
-        const row = document.createElement('div');
-        row.className = 'flex justify-between items-center py-1 border-b border-white/5 last:border-b-0';
-        row.innerHTML = `
-            <span class="text-white/80 truncate pr-2">${name}</span>
-            <span class="font-bold text-cyan-400">x${count}</span>
-        `;
-        list.appendChild(row);
-    });
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
 }
 
 function updateProposalCostEstimate() {
     const list = document.getElementById('prop-cost-estimate');
     if (!list) return;
     list.innerHTML = '';
-    
+
+    const { lines, totalCost } = collectProposalCostEstimate();
+    lines.forEach(line => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 border-b border-white/5 last:border-b-0';
+        row.innerHTML = `
+            <span class="text-white/60 truncate pr-2">${line.name}</span>
+            <span class="text-white/80">฿${line.cost.toLocaleString()}</span>
+        `;
+        list.appendChild(row);
+    });
+
+    const totalRow = document.createElement('div');
+    totalRow.className = 'flex justify-between items-center pt-2 mt-2 border-t border-cyan-500/30 text-xs font-bold';
+    totalRow.innerHTML = `
+        <span class="text-cyan-400">รวมประมาณการทั้งสิ้น</span>
+        <span class="text-cyan-300 font-mono">฿${totalCost.toLocaleString()}</span>
+    `;
+    list.appendChild(totalRow);
+}
+
+function collectProposalCostEstimate() {
     let totalCost = 0;
     const lines = [];
     
@@ -2690,25 +2795,7 @@ function updateProposalCostEstimate() {
         cost: setupFee
     });
     
-    // Populate
-    lines.forEach(line => {
-        const row = document.createElement('div');
-        row.className = 'flex justify-between items-center py-1 border-b border-white/5 last:border-b-0';
-        row.innerHTML = `
-            <span class="text-white/60 truncate pr-2">${line.name}</span>
-            <span class="text-white/80">฿${line.cost.toLocaleString()}</span>
-        `;
-        list.appendChild(row);
-    });
-    
-    // Total
-    const totalRow = document.createElement('div');
-    totalRow.className = 'flex justify-between items-center pt-2 mt-2 border-t border-cyan-500/30 text-xs font-bold';
-    totalRow.innerHTML = `
-        <span class="text-cyan-400">รวมประมาณการทั้งสิ้น</span>
-        <span class="text-cyan-300 font-mono">฿${totalCost.toLocaleString()}</span>
-    `;
-    list.appendChild(totalRow);
+    return { lines, totalCost };
 }
 
 function updateProposalCommentsList() {
@@ -2742,6 +2829,66 @@ function updateProposalCommentsList() {
         `;
         list.appendChild(item);
     });
+}
+
+function _tableRowsHtml(rows, emptyText) {
+    if (!rows.length) return `<tr><td colspan="2" class="muted">${escapeHTML(emptyText)}</td></tr>`;
+    return rows.map(row => `
+        <tr>
+            <td>${escapeHTML(row.name)}</td>
+            <td class="num">${row.count !== undefined ? `x${row.count}` : `฿${row.cost.toLocaleString()}`}</td>
+        </tr>
+    `).join('');
+}
+
+function downloadProposalSummary() {
+    const inventory = collectProposalInventory();
+    const cost = collectProposalCostEstimate();
+    const comments = commentPins.filter(p => !p.isEditing);
+    const screenshot = renderer ? renderer.domElement.toDataURL('image/png') : '';
+    const generatedAt = new Date().toLocaleString('th-TH');
+    const commentsHtml = comments.length
+        ? comments.map(pin => `<li><strong>หมุด #${pin.id}</strong> ${escapeHTML(pin.text)}</li>`).join('')
+        : '<li class="muted">ยังไม่มีข้อเสนอแนะ</li>';
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ez3d Proposal ${spaceWidth}x${spaceLength}m</title>
+<style>
+body{font-family:Inter,Arial,sans-serif;background:#f6f7f9;color:#111827;margin:0;padding:32px}
+.page{max-width:980px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 20px 50px rgba(15,23,42,.08)}
+header{padding:28px 32px;border-bottom:1px solid #e5e7eb;background:#0b0c10;color:#fff}
+h1{margin:0 0 6px;font-size:24px;letter-spacing:.02em} h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#0891b2;margin:28px 0 10px}
+.meta{font-size:12px;color:rgba(255,255,255,.65)} main{padding:28px 32px}.shot{width:100%;border-radius:10px;border:1px solid #e5e7eb;background:#111;margin-bottom:22px}
+table{width:100%;border-collapse:collapse;font-size:13px}td{padding:10px 0;border-bottom:1px solid #edf0f3}.num{text-align:right;font-weight:700;color:#0e7490}.total td{font-size:15px;color:#0e7490;font-weight:800;border-bottom:0;padding-top:14px}
+ul{margin:0;padding-left:20px;font-size:13px;line-height:1.7}.muted{color:#6b7280}.grid{display:grid;grid-template-columns:1fr 1fr;gap:28px}@media(max-width:760px){body{padding:12px}.grid{grid-template-columns:1fr}main,header{padding:20px}}
+</style>
+</head>
+<body>
+<div class="page">
+<header><h1>Ez3d Proposal Summary</h1><div class="meta">พื้นที่ ${spaceWidth} × ${spaceLength} ม. · สร้างเมื่อ ${escapeHTML(generatedAt)}</div></header>
+<main>
+${screenshot ? `<img class="shot" src="${screenshot}" alt="Ez3d mockup screenshot">` : ''}
+<div class="grid">
+<section><h2>Assets Inventory</h2><table>${_tableRowsHtml(inventory, 'ไม่มีวัตถุในฉาก')}</table></section>
+<section><h2>Cost Estimate</h2><table>${_tableRowsHtml(cost.lines, 'ไม่มีรายการค่าใช้จ่าย')}<tr class="total"><td>รวมประมาณการทั้งสิ้น</td><td class="num">฿${cost.totalCost.toLocaleString()}</td></tr></table></section>
+</div>
+<section><h2>Review Comments</h2><ul>${commentsHtml}</ul></section>
+</main>
+</div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), {
+        download: `Ez3d-Proposal-${spaceWidth}x${spaceLength}m.html`,
+        href: url,
+    }).click();
+    URL.revokeObjectURL(url);
 }
 
 function updateCommentPinsProjection() {
@@ -2807,6 +2954,7 @@ _g.submitDimensions    = submitDimensions;
 _g.spawnItem           = spawnItem;
 _g.setMode             = setMode;
 _g.showLeftTab         = showLeftTab;
+_g.applyLayoutTemplate = applyLayoutTemplate;
 _g.selectCarpetBrush   = selectCarpetBrush;
 _g.deleteSelectedItem  = deleteSelectedItem;
 _g.clearAllWorkspace   = clearAllWorkspace;
@@ -2851,6 +2999,7 @@ _g.toggleGridSnap      = toggleGridSnap;
 _g.groupSelected       = groupSelected;
 _g.ungroupSelected     = ungroupSelected;
 _g.toggleProposalMode  = toggleProposalMode;
+_g.downloadProposalSummary = downloadProposalSummary;
 _g.toggleCommentPinMode= toggleCommentPinMode;
 _g.savePin             = savePin;
 _g.cancelPin           = cancelPin;

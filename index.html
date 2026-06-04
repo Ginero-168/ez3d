@@ -351,6 +351,32 @@
             
             <!-- ── PANEL: OBJECTS ── -->
             <div id="panel-objects" class="p-3 space-y-4 hidden">
+                <!-- Layout templates -->
+                <div class="space-y-1.5">
+                    <p class="section-label">เทมเพลตจัดวาง</p>
+                    <div class="grid grid-cols-1 gap-1.5">
+                        <button onclick="applyLayoutTemplate('roadshow')" class="asset-btn">
+                            <div class="asset-icon">
+                                <svg class="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7h18M5 7v12h14V7M8 11h2m2 0h2m2 0h2M8 15h2m2 0h2m2 0h2" />
+                                </svg>
+                            </div>
+                            <div class="ml-2.5 min-w-0 text-left">
+                                <span class="text-white font-medium block text-xs">Roadshow Book Wall</span>
+                                <span class="text-[10px] text-white/35">โต๊ะ + ชั้นวาง + แคชเชียร์</span>
+                            </div>
+                        </button>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button onclick="applyLayoutTemplate('booth3x3')" class="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-cyan-500/30 rounded-xl py-2 px-2 text-[10px] font-semibold text-white/70 transition-all text-left">
+                                Booth 3x3
+                            </button>
+                            <button onclick="applyLayoutTemplate('cashierFlow')" class="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-cyan-500/30 rounded-xl py-2 px-2 text-[10px] font-semibold text-white/70 transition-all text-left">
+                                Cashier Flow
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Objects section -->
                 <div class="space-y-1.5">
                     <p class="section-label">วัตถุมาตรฐาน</p>
@@ -1035,6 +1061,13 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89" />
                     </svg>
                     <span class="text-[10px] font-bold ml-1.5">หมุนอัตโนมัติ</span>
+                </button>
+
+                <button onclick="downloadProposalSummary()" class="gizmo-btn" title="ส่งออกข้อเสนอเป็น HTML">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v12m0 0l-4-4m4 4l4-4" />
+                    </svg>
+                    <span class="text-[10px] font-bold ml-1.5">ส่งออกข้อเสนอ</span>
                 </button>
 
                 <button onclick="toggleProposalMode()" class="gizmo-btn bg-red-500/10 hover:bg-red-500/20 border-red-500/20 text-red-400" title="ออกจากการนำเสนอ">
