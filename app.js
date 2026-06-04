@@ -14,6 +14,7 @@ let commentPinModeActive = false;
 let commentPins = [];
 let _pinId = 0;
 let cameraTweenId = null;
+let turboModeEnabled = false;
 let selectedLight = null;
 let isDragging = false;
 let plane;
@@ -387,7 +388,14 @@ function init3D(W, L) {
 
 // ─── Floor Tiles ──────────────────────────────────────────────────────────
 function generateCarpetTiles(W, L) {
-    floorTiles.forEach(t => scene.remove(t));
+    floorTiles.forEach(t => {
+        scene.remove(t);
+        if (t.geometry) t.geometry.dispose();
+        if (t.material) {
+            if (Array.isArray(t.material)) t.material.forEach(m => m.dispose());
+            else t.material.dispose();
+        }
+    });
     floorTiles = [];
     const geo = new THREE.BoxGeometry(0.96, 0.02, 0.96);
     for (let i = 0; i < W; i++) {
@@ -2378,14 +2386,32 @@ function updateCommentPinsProjection() {
     });
 }
 
+function toggleTurboMode() {
+    turboModeEnabled = !turboModeEnabled;
+    const btn = document.getElementById('turbo-toggle-btn');
+    const text = document.getElementById('turbo-toggle-text');
+    if (btn) {
+        btn.classList.toggle('bg-yellow-500/15', turboModeEnabled);
+        btn.classList.toggle('text-yellow-300', turboModeEnabled);
+        btn.classList.toggle('border-yellow-500/30', turboModeEnabled);
+    }
+    if (text) {
+        text.innerText = turboModeEnabled ? "เทอร์โบไฟ: เปิด (Turbo: ON)" : "เทอร์โบไฟ: ปิด (Turbo: OFF)";
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // RENDER LOOP
 // ══════════════════════════════════════════════════════════════════════════
 function animate() {
     requestAnimationFrame(animate);
     if (selectedObject?.userData?.outlineHelper) selectedObject.userData.outlineHelper.update();
-    // Update all light helpers
-    sceneLights.forEach(e => { if (e.helper?.update) e.helper.update(); });
+    
+    // Update all light helpers only if Turbo mode is enabled (optimized performance)
+    if (turboModeEnabled) {
+        sceneLights.forEach(e => { if (e.helper?.update) e.helper.update(); });
+    }
+    
     // Update comment pins projection in proposal mode
     updateCommentPinsProjection();
     if (controls) controls.update();
@@ -2444,3 +2470,4 @@ _g.savePin             = savePin;
 _g.cancelPin           = cancelPin;
 _g.deletePin           = deletePin;
 _g.focusCameraOnPin    = focusCameraOnPin;
+_g.toggleTurboMode     = toggleTurboMode;
