@@ -7,5 +7,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/three/examples/jsm/controls')) return 'three-controls';
+          if (id.includes('node_modules/three/examples/jsm/loaders')) return 'three-loaders';
+          if (id.includes('node_modules/three')) return 'three-core';
+        },
+      },
+    },
   }
 });

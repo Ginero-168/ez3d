@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import './styles.css';
 
 // Ez3d — Exhibition Space 3D Mockup Studio
@@ -3045,20 +3046,9 @@ function toggleTurboMode() {
     }
 }
 
-function _vectorSnapshot(v) {
-    return { x: v.x, y: v.y, z: v.z };
-}
-
 function _debugObjectSnapshot(obj) {
     const center = _getSelectionCenter([obj]);
-    return {
-        name: obj.name,
-        type: obj.userData?.type || null,
-        position: _vectorSnapshot(obj.position),
-        rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
-        scale: _vectorSnapshot(obj.scale),
-        center: _vectorSnapshot(center),
-    };
+    return objectDebugSnapshot(obj, center);
 }
 
 function _installDebugHooks() {
@@ -3074,11 +3064,11 @@ function _installDebugHooks() {
                 selectedNames: selectedObjects.map(obj => obj.name),
                 selectedObjectName: selectedObject?.name || null,
                 selectedCount: selectedObjects.length,
-                selectionCenter: selectionCenter ? _vectorSnapshot(selectionCenter) : null,
+                selectionCenter: selectionCenter ? vectorSnapshot(selectionCenter) : null,
                 anchor: selectionAnchor ? {
-                    position: _vectorSnapshot(selectionAnchor.position),
+                    position: vectorSnapshot(selectionAnchor.position),
                     rotation: { x: selectionAnchor.rotation.x, y: selectionAnchor.rotation.y, z: selectionAnchor.rotation.z },
-                    scale: _vectorSnapshot(selectionAnchor.scale),
+                    scale: vectorSnapshot(selectionAnchor.scale),
                 } : null,
                 transformMode: transformControls?.mode || null,
             };

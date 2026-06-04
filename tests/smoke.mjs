@@ -128,6 +128,41 @@ async function run() {
     const multiUndoState = await page.evaluate(() => window.__ez3dDebug.getState());
     assertNearVector(multiUndoState.anchor.position, multiUndoState.selectionCenter, 'Multi undo anchor');
 
+    const multiMoveScaleState = await page.evaluate(() => {
+      window.setPositionX(1.25);
+      window.setScaleX(1.2);
+      return window.__ez3dDebug.getState();
+    });
+    assertNearVector(
+      multiMoveScaleState.anchor.position,
+      multiMoveScaleState.selectionCenter,
+      'Multi move/scale anchor'
+    );
+
+    const groupState = await page.evaluate(() => {
+      const before = window.__ez3dDebug.getState();
+      window.groupSelected();
+      const after = window.__ez3dDebug.getState();
+      return { before, after };
+    });
+    if (groupState.after.selectedCount !== 1) {
+      throw new Error(`Expected grouped selection count 1; got ${groupState.after.selectedCount}.`);
+    }
+    const grouped = groupState.after.objects.find(obj => obj.name === groupState.after.selectedNames[0]);
+    if (!grouped || grouped.type !== 'group') throw new Error('Grouping did not select a group object.');
+    if (groupState.after.objects.length !== groupState.before.objects.length - 1) {
+      throw new Error(`Grouping did not reduce top-level object count by 1; before ${groupState.before.objects.length}, after ${groupState.after.objects.length}.`);
+    }
+    assertNearVector(groupState.after.anchor.position, grouped.center, 'Grouped selection anchor');
+
+    await page.keyboard.press(platform() === 'darwin' ? 'Meta+Z' : 'Control+Z');
+    await page.waitForTimeout(100);
+    const ungroupedState = await page.evaluate(() => window.__ez3dDebug.getState());
+    if (ungroupedState.selectedCount !== 2) {
+      throw new Error(`Undo group should restore two selected objects; got ${ungroupedState.selectedCount}.`);
+    }
+    assertNearVector(ungroupedState.anchor.position, ungroupedState.selectionCenter, 'Undo group anchor');
+
     await page.locator('#snap-toggle-btn').click();
     const snapText = await page.locator('#snap-toggle-text').innerText();
     if (!snapText.includes('OFF')) throw new Error(`Snap did not toggle off: ${snapText}`);

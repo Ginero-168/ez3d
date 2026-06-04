@@ -57,6 +57,16 @@ npm run build
 
 *หน้าเว็บของคุณพร้อมออนไลน์เข้าชมผ่านโดเมนของคุณบน Hostinger ทันที!*
 
+### ทางเลือก: Deploy Hostinger อัตโนมัติผ่าน GitHub Actions
+Workflow ใน `.github/workflows/deploy.yml` จะ deploy ไป `gh-pages` ทุกครั้งที่ push เข้า `main` และสามารถอัปโหลดขึ้น Hostinger ผ่าน FTP ได้ด้วยถ้าตั้งค่า repository secrets ต่อไปนี้:
+
+* `HOSTINGER_FTP_SERVER` เช่น `ftp.your-domain.com`
+* `HOSTINGER_FTP_USERNAME`
+* `HOSTINGER_FTP_PASSWORD`
+* `HOSTINGER_FTP_SERVER_DIR` เช่น `/public_html/` (ไม่ใส่ก็ใช้ `/public_html/`)
+
+ถ้ายังไม่ได้ตั้ง secrets เหล่านี้ workflow จะข้ามขั้นตอน Hostinger deploy และยัง deploy ไป `gh-pages` ตามปกติ
+
 ---
 
 ## 🌐 ทางเลือกอื่นๆ สำหรับการ Deploy ฟรี
