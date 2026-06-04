@@ -514,11 +514,39 @@ function paintTile(tile, newStroke) {
     }
 }
 
+function paintAllTiles() {
+    _tilePaintBatch = [];
+    floorTiles.forEach(tile => {
+        const prevColor   = '#' + tile.material.color.getHexString();
+        const prevEmissive = '#' + tile.material.emissive.getHexString();
+
+        tile.material.color.set(activeCarpetBrushColor);
+        const isWhite = activeCarpetBrushColor === '#ffffff';
+        tile.material.emissive.set(isWhite ? '#444444' : activeCarpetBrushColor);
+        tile.material.emissiveIntensity = 0.2;
+
+        const nextColor   = '#' + tile.material.color.getHexString();
+        const nextEmissive = '#' + tile.material.emissive.getHexString();
+
+        if (prevColor !== nextColor) {
+            _tilePaintBatch.push({ tile, prevColor, prevEmissive, nextColor, nextEmissive });
+        }
+    });
+    _commitTileBatch();
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // OBJECT SELECTION
 // ══════════════════════════════════════════════════════════════════════════
 function selectObject(obj) {
     if (selectedObject === obj) return;
+    
+    // Clear light selection quietly to prevent UI properties display conflict
+    if (selectedLight) {
+        if (selectedLight.marker) selectedLight.marker.material.visible = false;
+        selectedLight = null;
+    }
+    
     if (selectedObject) _clearOutline(selectedObject);
     selectedObject = obj;
     obj.userData.outlineHelper = new THREE.BoxHelper(obj, 0x06b6d4);
@@ -1424,3 +1452,4 @@ _g.setLightSkyColor=setLightSkyColor; _g.setLightGroundColor=setLightGroundColor
 _g.renameLightEntry=renameLightEntry;
 _g.toggleLeftPanel     = toggleLeftPanel;
 _g.loadGLTFObject      = loadGLTFObject;
+_g.paintAllTiles       = paintAllTiles;
