@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Custom CSS styling for EventSpace 3D UI */
 
 /* General Scrollbar Styles for assets panel */

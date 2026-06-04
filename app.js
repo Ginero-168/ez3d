@@ -1,3 +1,9 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import './styles.css';
+
 // Ez3d — Exhibition Space 3D Mockup Studio
 // v3.0 — Command Pattern Undo/Redo · Full Lighting System · Auto-rotate
 // ═══════════════════════════════════════════════════════════════════════
@@ -6,6 +12,7 @@
 let scene, camera, renderer, controls, transformControls, gridHelper;
 let draggableObjects = [];
 let floorTiles = [];
+let floorTilesMesh = null;
 let selectedObject = null;
 let selectedObjects = [];
 let tempTransformGroup = null;
@@ -17,6 +24,7 @@ let cameraTweenId = null;
 let turboModeEnabled = false;
 let selectedLight = null;
 let isDragging = false;
+let _isGizmoDragging = false;
 let plane;
 const raycaster = new THREE.Raycaster();
 const mouse     = new THREE.Vector2();
@@ -45,6 +53,7 @@ let isLightMode     = false;
 let autoRotateEnabled = false;
 let guidesVisible   = true;
 let _tilePaintBatch = []; // group tile paints into one undo entry
+let _activeLightUndo = null;
 
 // ─── Base physical dimensions at scale(1,1,1) in meters ───────────────────
 const BASE_DIMS = {
@@ -213,14 +222,33 @@ function _cmdLightProp(entry, prevProps, newProps) {
     });
 }
 
+function _setTileColor(idx, hexColor) {
+    if (!floorTilesMesh) return;
+    const color = new THREE.Color(hexColor);
+    floorTilesMesh.setColorAt(idx, color);
+    if (floorTiles[idx]) {
+        floorTiles[idx].color = hexColor;
+    }
+}
+
 // Command: Tile paint batch
 function _commitTileBatch() {
     if (!_tilePaintBatch.length) return;
     const batch = [..._tilePaintBatch];
     _tilePaintBatch = [];
     _pushCmd({
-        undo() { batch.forEach(b => { b.tile.material.color.set(b.prevColor); b.tile.material.emissive.set(b.prevEmissive); }); },
-        redo() { batch.forEach(b => { b.tile.material.color.set(b.nextColor); b.tile.material.emissive.set(b.nextEmissive); }); }
+        undo() {
+            batch.forEach(b => {
+                _setTileColor(b.idx, b.prevColor);
+            });
+            if (floorTilesMesh && floorTilesMesh.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
+        },
+        redo() {
+            batch.forEach(b => {
+                _setTileColor(b.idx, b.nextColor);
+            });
+            if (floorTilesMesh && floorTilesMesh.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
+        }
     });
 }
 
@@ -297,7 +325,7 @@ function init3D(W, L) {
     renderer.toneMapping        = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
 
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping   = true;
     controls.dampingFactor   = 0.05;
     controls.maxPolarAngle   = Math.PI / 2 - 0.01;
@@ -331,12 +359,13 @@ function init3D(W, L) {
     scene.add(line);
 
     // Initialize TransformControls
-    transformControls = new THREE.TransformControls(camera, renderer.domElement);
+    transformControls = new TransformControls(camera, renderer.domElement);
     transformControls.size = 0.75;
     transformControls.addEventListener('change', () => {
         if (renderer && scene && camera) renderer.render(scene, camera);
     });
     transformControls.addEventListener('dragging-changed', (event) => {
+        _isGizmoDragging = event.value;
         controls.enabled = !event.value;
         if (event.value) {
             if (selectedObject) _recordDragStart(selectedObject);
@@ -382,36 +411,50 @@ function init3D(W, L) {
     renderer.domElement.addEventListener('pointerup',   onPointerUp,   { capture: true });
     addEventListener('keydown', onKeyDown);
 
+    _syncGridSnapButton();
     updateLayerList();
     animate();
 }
 
 // ─── Floor Tiles ──────────────────────────────────────────────────────────
 function generateCarpetTiles(W, L) {
-    floorTiles.forEach(t => {
-        scene.remove(t);
-        if (t.geometry) t.geometry.dispose();
-        if (t.material) {
-            if (Array.isArray(t.material)) t.material.forEach(m => m.dispose());
-            else t.material.dispose();
-        }
-    });
+    if (floorTilesMesh) {
+        scene.remove(floorTilesMesh);
+        if (floorTilesMesh.geometry) floorTilesMesh.geometry.dispose();
+        if (floorTilesMesh.material) floorTilesMesh.material.dispose();
+    }
     floorTiles = [];
+
     const geo = new THREE.BoxGeometry(0.96, 0.02, 0.96);
+    const mat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: 0.9, metalness: 0.05,
+        emissive: 0x000000
+    });
+    
+    const count = W * L;
+    floorTilesMesh = new THREE.InstancedMesh(geo, mat, count);
+    floorTilesMesh.receiveShadow = true;
+    floorTilesMesh.castShadow = false;
+    
+    const dummy = new THREE.Object3D();
+    const defaultColor = new THREE.Color('#27272a');
+    let idx = 0;
+    
     for (let i = 0; i < W; i++) {
         for (let j = 0; j < L; j++) {
-            const mat = new THREE.MeshStandardMaterial({
-                color: 0x27272a, roughness: 0.9, metalness: 0.05,
-                emissive: 0x09090b, emissiveIntensity: 0.15,
-            });
-            const tile = new THREE.Mesh(geo, mat);
-            tile.position.set(i - W/2 + 0.5, -0.01, j - L/2 + 0.5);
-            tile.receiveShadow = true;
-            tile.userData = { type: 'floor_tile', tileIdx: floorTiles.length };
-            scene.add(tile);
-            floorTiles.push(tile);
+            dummy.position.set(i - W/2 + 0.5, -0.01, j - L/2 + 0.5);
+            dummy.updateMatrix();
+            floorTilesMesh.setMatrixAt(idx, dummy.matrix);
+            floorTilesMesh.setColorAt(idx, defaultColor);
+            
+            floorTiles.push({ idx, color: '#27272a' });
+            idx++;
         }
     }
+    
+    floorTilesMesh.instanceMatrix.needsUpdate = true;
+    if (floorTilesMesh.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
+    scene.add(floorTilesMesh);
 }
 
 // ─── Resize ───────────────────────────────────────────────────────────────
@@ -419,6 +462,24 @@ function onWindowResize() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+}
+
+function _syncGridSnapButton() {
+    const btn = document.getElementById('snap-toggle-btn');
+    if (!btn) return;
+    btn.classList.toggle('bg-cyan-500/15', gridSnapEnabled);
+    btn.classList.toggle('text-cyan-300', gridSnapEnabled);
+    btn.classList.toggle('border-cyan-500/30', gridSnapEnabled);
+    btn.classList.toggle('bg-white/5', !gridSnapEnabled);
+    btn.classList.toggle('text-white/70', !gridSnapEnabled);
+    btn.classList.toggle('border-white/10', !gridSnapEnabled);
+    const label = document.getElementById('snap-toggle-text');
+    if (label) label.innerText = gridSnapEnabled ? 'จัดยึดตามกริด (Snap: ON)' : 'จัดยึดตามกริด (Snap: OFF)';
+}
+
+function toggleGridSnap() {
+    gridSnapEnabled = !gridSnapEnabled;
+    _syncGridSnapButton();
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -518,6 +579,10 @@ function _countType(type) { return draggableObjects.filter(o => o.userData.type 
 // ══════════════════════════════════════════════════════════════════════════
 function onPointerDown(event) {
     if (event.target.id !== 'canvas3d') return;
+    
+    // Give the canvas keyboard focus so W/E/R shortcuts work
+    renderer.domElement.focus({ preventScroll: true });
+    
     mouse.x = (event.clientX / innerWidth)  * 2 - 1;
     mouse.y = -(event.clientY / innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
@@ -525,8 +590,9 @@ function onPointerDown(event) {
     // ── PROPOSAL / COMMENT PIN PLACE MODE
     if (proposalModeActive) {
         if (commentPinModeActive) {
-            // Raycast against draggableObjects and floorTiles
-            const allTargets = [...draggableObjects, ...floorTiles];
+            // Raycast against draggableObjects and floorTilesMesh
+            const allTargets = [...draggableObjects];
+            if (floorTilesMesh) allTargets.push(floorTilesMesh);
             const hits = raycaster.intersectObjects(allTargets, true);
             if (hits.length > 0) {
                 event.stopPropagation();
@@ -563,17 +629,29 @@ function onPointerDown(event) {
         return; // Don't do standard object editing/selection when in proposal mode
     }
 
-    if (transformControls && transformControls.visible) {
-        const gizmoHits = raycaster.intersectObject(transformControls, true);
-        if (gizmoHits.length > 0) return;
+    // Only block clicks when the gizmo is actively being dragged
+    if (_isGizmoDragging) {
+        return;
+    }
+    
+    // Check if user clicked directly on a gizmo handle — let TransformControls handle it
+    if (transformControls && transformControls.visible && selectedObject) {
+        const gizmoObjects = [];
+        transformControls.traverse(child => {
+            if (child.isMesh || child.isLine) gizmoObjects.push(child);
+        });
+        const gizmoHits = raycaster.intersectObjects(gizmoObjects, true);
+        if (gizmoHits.length > 0) {
+            return; // Let TransformControls handle its own gizmo click
+        }
     }
 
     // ── PAINT MODE
-    if (currentMode === 'paint') {
-        const hits = raycaster.intersectObjects(floorTiles);
-        if (hits.length > 0) {
+    if (currentMode === 'paint' && floorTilesMesh) {
+        const hits = raycaster.intersectObject(floorTilesMesh);
+        if (hits.length > 0 && hits[0].instanceId !== undefined) {
             event.stopPropagation();
-            paintTile(hits[0].object, true); // true = start new batch
+            paintTile(hits[0].instanceId, true); // true = start new batch
         }
         return;
     }
@@ -588,7 +666,7 @@ function onPointerDown(event) {
             deselectLight();
             const append = event.shiftKey || event.ctrlKey || event.metaKey;
             selectObject(target, append);
-            if (selectedObject) {
+            if (selectedObject && transformControls && transformControls.mode === 'translate') {
                 isDragging = true;
                 controls.enabled = false;
                 _recordDragStart(selectedObject);
@@ -620,10 +698,10 @@ function onPointerMove(event) {
     mouse.y = -(event.clientY / innerHeight) * 2 + 1;
 
     // Drag-paint
-    if (currentMode === 'paint' && event.buttons === 1) {
+    if (currentMode === 'paint' && event.buttons === 1 && floorTilesMesh) {
         raycaster.setFromCamera(mouse, camera);
-        const hits = raycaster.intersectObjects(floorTiles);
-        if (hits.length > 0) paintTile(hits[0].object, false);
+        const hits = raycaster.intersectObject(floorTilesMesh);
+        if (hits.length > 0 && hits[0].instanceId !== undefined) paintTile(hits[0].instanceId, false);
         return;
     }
 
@@ -664,67 +742,94 @@ function onPointerUp() {
 // ─── Keyboard ────────────────────────────────────────────────────────────
 function onKeyDown(e) {
     if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
-    if ((e.ctrlKey||e.metaKey) && e.key==='z') { e.preventDefault(); undo(); return; }
-    if ((e.ctrlKey||e.metaKey) && (e.key==='y'||(e.shiftKey&&e.key==='Z'))) { e.preventDefault(); redo(); return; }
-    if ((e.ctrlKey||e.metaKey) && e.key==='d') { e.preventDefault(); duplicateSelected(); return; }
+    
+    // Undo / Redo / Duplicate
+    const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+    if (isCmdOrCtrl && (e.key === 'z' || e.key === 'Z' || e.code === 'KeyZ')) {
+        e.preventDefault();
+        undo();
+        return;
+    }
+    if (isCmdOrCtrl && (e.key === 'y' || e.key === 'Y' || e.code === 'KeyY' || (e.shiftKey && (e.key === 'Z' || e.code === 'KeyZ')))) {
+        e.preventDefault();
+        redo();
+        return;
+    }
+    if (isCmdOrCtrl && (e.key === 'd' || e.key === 'D' || e.code === 'KeyD')) {
+        e.preventDefault();
+        duplicateSelected();
+        return;
+    }
+
+    switch (e.code) {
+        case 'Delete':
+        case 'Backspace':
+            deleteSelectedItem();
+            return;
+        case 'Escape':
+            deselectObject();
+            deselectLight();
+            return;
+        case 'KeyW':
+            setGizmoMode('translate');
+            return;
+        case 'KeyE':
+            setGizmoMode('rotate');
+            return;
+        case 'KeyR':
+            setGizmoMode('scale');
+            return;
+        case 'KeyG':
+            toggleGridSnap();
+            return;
+        case 'KeyA':
+            toggleAutoRotate();
+            return;
+    }
+
+    // Fallback for keyboard layouts (e.g. Thai layout outputting characters instead of English)
     switch (e.key) {
         case 'Delete': case 'Backspace': deleteSelectedItem(); break;
         case 'Escape': deselectObject(); deselectLight(); break;
-        case 'w': case 'W': setGizmoMode('translate'); break;
-        case 'e': case 'E': setGizmoMode('rotate'); break;
-        case 'r': case 'R': setGizmoMode('scale'); break;
-        case 'g': case 'G':
-            gridSnapEnabled = !gridSnapEnabled;
-            const sb = document.getElementById('snap-toggle-btn');
-            if (sb) sb.textContent = gridSnapEnabled ? '⊞ Snap: ON' : '⊟ Snap: OFF';
+        case 'w': case 'W': case 'ไ': setGizmoMode('translate'); break;
+        case 'e': case 'E': case 'ำ': case 'ณ': setGizmoMode('rotate'); break;
+        case 'r': case 'R': case 'พ': setGizmoMode('scale'); break;
+        case 'g': case 'G': case 'ด':
+            toggleGridSnap();
             break;
-        case 'a': case 'A': toggleAutoRotate(); break;
+        case 'a': case 'A': case 'ฟ': toggleAutoRotate(); break;
     }
 }
 
 // ─── Tile Paint ───────────────────────────────────────────────────────────
 let _paintedThisStroke = new Set();
-function paintTile(tile, newStroke) {
+function paintTile(tileIdx, newStroke) {
     if (newStroke) _paintedThisStroke = new Set();
-    if (_paintedThisStroke.has(tile)) return;
-    _paintedThisStroke.add(tile);
+    if (_paintedThisStroke.has(tileIdx)) return;
+    _paintedThisStroke.add(tileIdx);
 
-    // Record previous state for undo
-    const prevColor   = '#' + tile.material.color.getHexString();
-    const prevEmissive = '#' + tile.material.emissive.getHexString();
+    const prevColor = floorTiles[tileIdx] ? floorTiles[tileIdx].color : '#27272a';
+    const nextColor = activeCarpetBrushColor;
 
-    tile.material.color.set(activeCarpetBrushColor);
-    const isWhite = activeCarpetBrushColor === '#ffffff';
-    tile.material.emissive.set(isWhite ? '#444444' : activeCarpetBrushColor);
-    tile.material.emissiveIntensity = 0.2;
-
-    const nextColor   = '#' + tile.material.color.getHexString();
-    const nextEmissive = '#' + tile.material.emissive.getHexString();
-
-    // Only add to batch if color actually changed
     if (prevColor !== nextColor) {
-        _tilePaintBatch.push({ tile, prevColor, prevEmissive, nextColor, nextEmissive });
+        _setTileColor(tileIdx, nextColor);
+        if (floorTilesMesh && floorTilesMesh.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
+        _tilePaintBatch.push({ idx: tileIdx, prevColor, nextColor });
     }
 }
 
 function paintAllTiles() {
     _tilePaintBatch = [];
     floorTiles.forEach(tile => {
-        const prevColor   = '#' + tile.material.color.getHexString();
-        const prevEmissive = '#' + tile.material.emissive.getHexString();
-
-        tile.material.color.set(activeCarpetBrushColor);
-        const isWhite = activeCarpetBrushColor === '#ffffff';
-        tile.material.emissive.set(isWhite ? '#444444' : activeCarpetBrushColor);
-        tile.material.emissiveIntensity = 0.2;
-
-        const nextColor   = '#' + tile.material.color.getHexString();
-        const nextEmissive = '#' + tile.material.emissive.getHexString();
+        const prevColor = tile.color;
+        const nextColor = activeCarpetBrushColor;
 
         if (prevColor !== nextColor) {
-            _tilePaintBatch.push({ tile, prevColor, prevEmissive, nextColor, nextEmissive });
+            _setTileColor(tile.idx, nextColor);
+            _tilePaintBatch.push({ idx: tile.idx, prevColor, nextColor });
         }
     });
+    if (floorTilesMesh && floorTilesMesh.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
     _commitTileBatch();
 }
 
@@ -1000,8 +1105,14 @@ function toggleGuides() {
 
 function _clearOutline(obj) {
     if (obj?.userData?.outlineHelper) {
-        scene.remove(obj.userData.outlineHelper);
-        obj.userData.outlineHelper.dispose();
+        const helper = obj.userData.outlineHelper;
+        scene.remove(helper);
+        if (helper.geometry?.dispose) helper.geometry.dispose();
+        if (Array.isArray(helper.material)) {
+            helper.material.forEach(m => m?.dispose?.());
+        } else if (helper.material?.dispose) {
+            helper.material.dispose();
+        }
         delete obj.userData.outlineHelper;
     }
 }
@@ -1377,42 +1488,68 @@ function _withLightUndo(apply) {
     updateLightHelper(selectedLight);
     const next = _getLightProps(selectedLight);
     const entry = selectedLight;
+    _pushLightPropCmd(entry, prev, next);
+}
+
+function _lightPropsChanged(prev, next) {
+    return JSON.stringify(prev) !== JSON.stringify(next);
+}
+
+function _pushLightPropCmd(entry, prev, next) {
+    if (!entry || !_lightPropsChanged(prev, next)) return;
     _pushCmd({
         undo() { _applyLightProps(entry, prev); syncLightPanel(); },
         redo() { _applyLightProps(entry, next); syncLightPanel(); }
     });
 }
 
-function setLightColor(hex) {
-    if (!selectedLight) return;
-    selectedLight.light.color.set(hex);
-    updateLightHelper(selectedLight);
+function beginLightUndo() {
+    if (!selectedLight || _activeLightUndo) return;
+    _activeLightUndo = {
+        entry: selectedLight,
+        prev: _getLightProps(selectedLight)
+    };
 }
-function setLightIntensity(v) {
-    if (!selectedLight) return;
-    selectedLight.light.intensity = parseFloat(v) || 0;
+
+function commitLightUndo() {
+    if (!_activeLightUndo) return;
+    const { entry, prev } = _activeLightUndo;
+    _activeLightUndo = null;
+    const next = _getLightProps(entry);
+    _pushLightPropCmd(entry, prev, next);
+    syncLightPanel();
 }
+
+function _applyLightLive(apply, commit = true) {
+    if (!selectedLight) return;
+    beginLightUndo();
+    const entry = selectedLight;
+    apply(entry.light, entry);
+    updateLightHelper(entry);
+    if (commit) commitLightUndo();
+}
+
+function setLightColor(hex, commit = true) { _applyLightLive(l => l.color.set(hex), commit); }
+function setLightIntensity(v, commit = true) { _applyLightLive(l => { l.intensity = parseFloat(v) || 0; }, commit); }
 function setLightVisible(v) {
-    if (!selectedLight) return;
-    selectedLight.light.visible = v;
-    if (selectedLight.helper) selectedLight.helper.visible = v;
-    if (selectedLight.marker) selectedLight.marker.visible = v && selectedLight === selectedLight; // keep marker
+    _applyLightLive((l, entry) => {
+        l.visible = v;
+        if (entry.helper) entry.helper.visible = v && guidesVisible;
+        if (entry.marker) entry.marker.material.visible = v && entry === selectedLight && guidesVisible;
+    });
 }
-function setLightShadow(v) {
-    if (!selectedLight) return;
-    selectedLight.light.castShadow = v;
-}
-function setLightPosX(v){ if(selectedLight?.light?.position) { selectedLight.light.position.x = parseFloat(v)||0; updateLightHelper(selectedLight); syncLightPanel(); }}
-function setLightPosY(v){ if(selectedLight?.light?.position) { selectedLight.light.position.y = parseFloat(v)||0; updateLightHelper(selectedLight); syncLightPanel(); }}
-function setLightPosZ(v){ if(selectedLight?.light?.position) { selectedLight.light.position.z = parseFloat(v)||0; updateLightHelper(selectedLight); syncLightPanel(); }}
-function setLightTgtX(v){ if(selectedLight?.light?.target) { selectedLight.light.target.position.x = parseFloat(v)||0; updateLightHelper(selectedLight); }}
-function setLightTgtY(v){ if(selectedLight?.light?.target) { selectedLight.light.target.position.y = parseFloat(v)||0; updateLightHelper(selectedLight); }}
-function setLightTgtZ(v){ if(selectedLight?.light?.target) { selectedLight.light.target.position.z = parseFloat(v)||0; updateLightHelper(selectedLight); }}
-function setLightAngle(v)    { if(selectedLight?.light) { selectedLight.light.angle    = THREE.MathUtils.degToRad(parseFloat(v)||30); updateLightHelper(selectedLight); }}
-function setLightPenumbra(v) { if(selectedLight?.light) { selectedLight.light.penumbra = Math.max(0, Math.min(1, parseFloat(v)||0.2)); updateLightHelper(selectedLight); }}
-function setLightDistance(v) { if(selectedLight?.light) { selectedLight.light.distance = parseFloat(v)||0; updateLightHelper(selectedLight); }}
-function setLightSkyColor(hex)    { if(selectedLight?.light) selectedLight.light.color.set(hex); }
-function setLightGroundColor(hex) { if(selectedLight?.light?.groundColor) selectedLight.light.groundColor.set(hex); }
+function setLightShadow(v) { _applyLightLive(l => { l.castShadow = v; }); }
+function setLightPosX(v){ _applyLightLive(l => { if (l.position) l.position.x = parseFloat(v)||0; }); syncLightPanel(); }
+function setLightPosY(v){ _applyLightLive(l => { if (l.position) l.position.y = parseFloat(v)||0; }); syncLightPanel(); }
+function setLightPosZ(v){ _applyLightLive(l => { if (l.position) l.position.z = parseFloat(v)||0; }); syncLightPanel(); }
+function setLightTgtX(v){ _applyLightLive(l => { if (l.target) l.target.position.x = parseFloat(v)||0; }); }
+function setLightTgtY(v){ _applyLightLive(l => { if (l.target) l.target.position.y = parseFloat(v)||0; }); }
+function setLightTgtZ(v){ _applyLightLive(l => { if (l.target) l.target.position.z = parseFloat(v)||0; }); }
+function setLightAngle(v)    { _applyLightLive(l => { l.angle = THREE.MathUtils.degToRad(parseFloat(v)||30); }); }
+function setLightPenumbra(v) { _applyLightLive(l => { l.penumbra = Math.max(0, Math.min(1, parseFloat(v)||0.2)); }); }
+function setLightDistance(v) { _applyLightLive(l => { l.distance = parseFloat(v)||0; }); }
+function setLightSkyColor(hex, commit = true) { _applyLightLive(l => l.color.set(hex), commit); }
+function setLightGroundColor(hex, commit = true) { _applyLightLive(l => { if (l.groundColor) l.groundColor.set(hex); }, commit); }
 function renameLightEntry(v)      { if(selectedLight) { selectedLight.name = v; updateLayerList(); }}
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1685,18 +1822,20 @@ function updateLayerList() {
 // ══════════════════════════════════════════════════════════════════════════
 // MODE & TOGGLE FLOATING PANELS
 // ══════════════════════════════════════════════════════════════════════════
-let activeLeftPanel = null; // 'assets' | 'layers' | 'paint' | null
+let activeLeftPanel = null; // 'objects' | 'lights' | 'layers' | 'paint' | null
 
 function toggleLeftPanel(panelName) {
     const panelEl = document.getElementById('left-floating-panel');
     const titleEl = document.getElementById('left-panel-title');
     const buttons = {
-        assets: document.getElementById('tab-btn-assets'),
+        objects: document.getElementById('tab-btn-objects'),
+        lights: document.getElementById('tab-btn-lights'),
         layers: document.getElementById('tab-btn-layers'),
         paint: document.getElementById('tab-btn-paint')
     };
     const titles = {
-        assets: 'เพิ่มวัตถุและแสงไฟ',
+        objects: 'เพิ่มวัตถุ (Objects)',
+        lights: 'ตั้งค่าแสงไฟ (Lights)',
         layers: 'รายการวัตถุในห้อง',
         paint: 'ระบายสีพื้นพรม'
     };
@@ -1722,7 +1861,8 @@ function toggleLeftPanel(panelName) {
     if (titleEl) titleEl.innerText = titles[panelName] || 'เครื่องมือ';
     
     // Show correct sub-panel
-    document.getElementById('panel-assets').classList.toggle('hidden', panelName !== 'assets');
+    document.getElementById('panel-objects').classList.toggle('hidden', panelName !== 'objects');
+    document.getElementById('panel-lights').classList.toggle('hidden', panelName !== 'lights');
     document.getElementById('panel-layers').classList.toggle('hidden', panelName !== 'layers');
     document.getElementById('panel-paint').classList.toggle('hidden', panelName !== 'paint');
     
@@ -1744,12 +1884,14 @@ function showLeftTab(tab) {
     const panelEl = document.getElementById('left-floating-panel');
     const titleEl = document.getElementById('left-panel-title');
     const buttons = {
-        assets: document.getElementById('tab-btn-assets'),
+        objects: document.getElementById('tab-btn-objects'),
+        lights: document.getElementById('tab-btn-lights'),
         layers: document.getElementById('tab-btn-layers'),
         paint: document.getElementById('tab-btn-paint')
     };
     const titles = {
-        assets: 'เพิ่มวัตถุและแสงไฟ',
+        objects: 'เพิ่มวัตถุ (Objects)',
+        lights: 'ตั้งค่าแสงไฟ (Lights)',
         layers: 'รายการวัตถุในห้อง',
         paint: 'ระบายสีพื้นพรม'
     };
@@ -1763,7 +1905,8 @@ function showLeftTab(tab) {
         if (buttons[tab]) buttons[tab].classList.add('active');
         if (titleEl) titleEl.innerText = titles[tab] || 'เครื่องมือ';
 
-        document.getElementById('panel-assets').classList.toggle('hidden', tab !== 'assets');
+        document.getElementById('panel-objects').classList.toggle('hidden', tab !== 'objects');
+        document.getElementById('panel-lights').classList.toggle('hidden', tab !== 'lights');
         document.getElementById('panel-layers').classList.toggle('hidden', tab !== 'layers');
         document.getElementById('panel-paint').classList.toggle('hidden', tab !== 'paint');
         
@@ -1838,12 +1981,25 @@ function setCameraAngle(angle) {
         case 'isometric_right': camera.position.set(of,  of*0.7, of*0.8); break;
     }
     if (controls) controls.update();
+
+    // Update active button state in bottom toolbar
+    const map = { 'top': 'top', 'isometric_left': 'left', 'isometric_right': 'right' };
+    ['top', 'left', 'right'].forEach(a => {
+        const btn = document.getElementById(`cam-angle-${a}`);
+        if (btn) {
+            if (map[angle] === a) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    });
 }
 
 function toggleAutoRotate() {
     autoRotateEnabled = !autoRotateEnabled;
     controls.autoRotate = autoRotateEnabled;
-    const btn = document.getElementById('btn-auto-rotate');
+    const btn = document.getElementById('btn-auto-rotate-bottom');
     if (btn) {
         btn.classList.toggle('active', autoRotateEnabled);
     }
@@ -1891,7 +2047,7 @@ function captureMockup() {
 function loadGLTFObject(file) {
     if (!file) return;
     const url = URL.createObjectURL(file);
-    const loader = new THREE.GLTFLoader();
+    const loader = new GLTFLoader();
     
     // Show loader overlay
     const overlay = document.getElementById('loading-overlay');
@@ -2460,6 +2616,7 @@ _g.loadGLTFObject      = loadGLTFObject;
 _g.paintAllTiles       = paintAllTiles;
 _g.setGizmoMode        = setGizmoMode;
 _g.toggleGuides        = toggleGuides;
+_g.toggleGridSnap      = toggleGridSnap;
 
 // Group & Proposal features
 _g.groupSelected       = groupSelected;
@@ -2471,3 +2628,5 @@ _g.cancelPin           = cancelPin;
 _g.deletePin           = deletePin;
 _g.focusCameraOnPin    = focusCameraOnPin;
 _g.toggleTurboMode     = toggleTurboMode;
+_g.beginLightUndo      = beginLightUndo;
+_g.commitLightUndo     = commitLightUndo;
