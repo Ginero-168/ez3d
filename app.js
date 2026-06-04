@@ -25,6 +25,7 @@ let turboModeEnabled = false;
 let selectedLight = null;
 let isDragging = false;
 let _isGizmoDragging = false;
+let _pendingScenePick = null;
 let plane;
 const raycaster = new THREE.Raycaster();
 const mouse     = new THREE.Vector2();
@@ -577,15 +578,34 @@ function _countType(type) { return draggableObjects.filter(o => o.userData.type 
 // ══════════════════════════════════════════════════════════════════════════
 // POINTER EVENTS — CAPTURE PHASE
 // ══════════════════════════════════════════════════════════════════════════
+function _setPointerFromEvent(event) {
+    mouse.x = (event.clientX / innerWidth)  * 2 - 1;
+    mouse.y = -(event.clientY / innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+}
+
+function _getObjectHitFromRay() {
+    const objHits = raycaster.intersectObjects(draggableObjects, true);
+    if (objHits.length === 0) return null;
+    let target = objHits[0].object;
+    while (target && !draggableObjects.includes(target)) target = target.parent;
+    return target || null;
+}
+
+function _selectSceneObject(target, event) {
+    if (!target) return;
+    deselectLight();
+    const append = event.shiftKey || event.ctrlKey || event.metaKey;
+    selectObject(target, append);
+}
+
 function onPointerDown(event) {
     if (event.target.id !== 'canvas3d') return;
     
     // Give the canvas keyboard focus so W/E/R shortcuts work
     renderer.domElement.focus({ preventScroll: true });
-    
-    mouse.x = (event.clientX / innerWidth)  * 2 - 1;
-    mouse.y = -(event.clientY / innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
+    _pendingScenePick = null;
+    _setPointerFromEvent(event);
 
     // ── PROPOSAL / COMMENT PIN PLACE MODE
     if (proposalModeActive) {
@@ -657,24 +677,24 @@ function onPointerDown(event) {
     }
 
     // ── OBJECTS
-    const objHits = raycaster.intersectObjects(draggableObjects, true);
-    if (objHits.length > 0) {
-        let target = objHits[0].object;
-        while (target && !draggableObjects.includes(target)) target = target.parent;
-        if (target) {
-            event.stopPropagation();
-            deselectLight();
-            const append = event.shiftKey || event.ctrlKey || event.metaKey;
-            selectObject(target, append);
-            if (selectedObject && transformControls && transformControls.mode === 'translate') {
-                isDragging = true;
-                controls.enabled = false;
-                _recordDragStart(selectedObject);
-                const ph = raycaster.intersectObject(plane);
-                if (ph.length > 0) { dragOffset.copy(selectedObject.position).sub(ph[0].point); dragOffset.y = 0; }
-            }
-            return;
+    const target = _getObjectHitFromRay();
+    if (target) {
+        event.stopPropagation();
+        _pendingScenePick = {
+            target,
+            append: event.shiftKey || event.ctrlKey || event.metaKey,
+            x: event.clientX,
+            y: event.clientY,
+        };
+        _selectSceneObject(target, event);
+        if (selectedObject && transformControls && transformControls.mode === 'translate') {
+            isDragging = true;
+            controls.enabled = false;
+            _recordDragStart(selectedObject);
+            const ph = raycaster.intersectObject(plane);
+            if (ph.length > 0) { dragOffset.copy(selectedObject.position).sub(ph[0].point); dragOffset.y = 0; }
         }
+        return;
     }
 
     // ── LIGHT MARKERS
@@ -694,19 +714,16 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
-    mouse.x = (event.clientX / innerWidth)  * 2 - 1;
-    mouse.y = -(event.clientY / innerHeight) * 2 + 1;
+    _setPointerFromEvent(event);
 
     // Drag-paint
     if (currentMode === 'paint' && event.buttons === 1 && floorTilesMesh) {
-        raycaster.setFromCamera(mouse, camera);
         const hits = raycaster.intersectObject(floorTilesMesh);
         if (hits.length > 0 && hits[0].instanceId !== undefined) paintTile(hits[0].instanceId, false);
         return;
     }
 
     if (!isDragging || !selectedObject) return;
-    raycaster.setFromCamera(mouse, camera);
     const ph = raycaster.intersectObject(plane);
     if (ph.length > 0) {
         const p = ph[0].point.clone().add(dragOffset);
@@ -722,7 +739,21 @@ function onPointerMove(event) {
     }
 }
 
-function onPointerUp() {
+function onPointerUp(event) {
+    if (_pendingScenePick?.target && event?.target?.id === 'canvas3d') {
+        const dx = event.clientX - _pendingScenePick.x;
+        const dy = event.clientY - _pendingScenePick.y;
+        if (!_pendingScenePick.append && Math.hypot(dx, dy) <= 6) {
+            const target = _pendingScenePick.target;
+            const syntheticEvent = {
+                shiftKey: _pendingScenePick.append,
+                ctrlKey: false,
+                metaKey: false,
+            };
+            _selectSceneObject(target, syntheticEvent);
+        }
+    }
+    _pendingScenePick = null;
     isDragging = false;
     controls.enabled = true;
     if (selectedObjects.length > 1) {

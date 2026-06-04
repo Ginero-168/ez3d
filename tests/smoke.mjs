@@ -60,6 +60,12 @@ async function run() {
     const layerText = await page.locator('#layer-list').innerText();
     if (!layerText.includes('โต๊ะ #1')) throw new Error('Table was not added to layer list.');
 
+    await page.keyboard.press('Escape');
+    await page.mouse.click(720, 450);
+    await page.waitForTimeout(100);
+    const selectedTitle = await page.locator('#selected-title').innerText();
+    if (!selectedTitle.includes('โต๊ะ')) throw new Error(`Canvas click did not select table; selected ${selectedTitle}.`);
+
     await page.locator('#snap-toggle-btn').click();
     const snapText = await page.locator('#snap-toggle-text').innerText();
     if (!snapText.includes('OFF')) throw new Error(`Snap did not toggle off: ${snapText}`);
