@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 // ─── Core Variables ──────────────────────────────────────────────────────
-let scene, camera, renderer, controls;
+let scene, camera, renderer, controls, transformControls, gridHelper;
 let draggableObjects = [];
 let floorTiles = [];
 let selectedObject = null;
@@ -28,12 +28,13 @@ let _dragStart = null; // {obj|entry, pos, rot, scl} recorded at pointerdown
 // ─── App State ────────────────────────────────────────────────────────────
 let currentMode         = 'objects';
 let activeCarpetBrushColor = '#374151';
-let spaceWidth  = 16;
-let spaceLength = 3;
+let spaceWidth  = 15;
+let spaceLength = 15;
 let gridSnapSize    = 0.5;
 let gridSnapEnabled = true;
 let isLightMode     = false;
 let autoRotateEnabled = false;
+let guidesVisible   = true;
 let _tilePaintBatch = []; // group tile paints into one undo entry
 
 // ─── Base physical dimensions at scale(1,1,1) in meters ───────────────────
@@ -116,7 +117,9 @@ function _commitDrag() {
     const newRot = new THREE.Euler(obj.rotation.x, obj.rotation.y, obj.rotation.z, obj.rotation.order);
     const newScl = obj.scale.clone();
     if (pos.distanceTo(newPos) < 0.001 && scl.distanceTo(newScl) < 0.001 &&
-        Math.abs(rot.y - newRot.y) < 0.001) return; // no meaningful change
+        Math.abs(rot.x - newRot.x) < 0.001 &&
+        Math.abs(rot.y - newRot.y) < 0.001 &&
+        Math.abs(rot.z - newRot.z) < 0.001) return; // no meaningful change
     _pushCmd({
         undo() { obj.position.copy(pos); obj.rotation.copy(rot); obj.scale.copy(scl); if (selectedObject === obj) syncTransformPanel(); },
         redo() { obj.position.copy(newPos); obj.rotation.copy(newRot); obj.scale.copy(newScl); if (selectedObject === obj) syncTransformPanel(); }
@@ -153,17 +156,19 @@ function _removeFromScene(obj) {
     if (idx > -1) draggableObjects.splice(idx, 1);
     if (obj.userData.outlineHelper) { scene.remove(obj.userData.outlineHelper); delete obj.userData.outlineHelper; }
     scene.remove(obj);
-    if (selectedObject === obj) { selectedObject = null; updateUI(); }
+    if (selectedObject === obj) {
+        deselectObject();
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
 // SETUP MODAL
 // ══════════════════════════════════════════════════════════════════════════
 function submitDimensions() {
-    let w = parseInt(document.getElementById('input-width').value)  || 16;
-    let l = parseInt(document.getElementById('input-length').value) || 3;
-    w = Math.max(2, Math.min(50, w));
-    l = Math.max(1, Math.min(15, l));
+    let w = parseInt(document.getElementById('input-width').value)  || 15;
+    let l = parseInt(document.getElementById('input-length').value) || 15;
+    w = Math.max(1, w);
+    l = Math.max(1, l);
     spaceWidth  = w;
     spaceLength = l;
 
@@ -210,10 +215,13 @@ function init3D(W, L) {
     plane = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ visible: false }));
     scene.add(plane);
 
-    // Grid
-    const grid = new THREE.GridHelper(150, 75, 0x1a2030, 0x0f1520);
-    grid.position.y = -0.02;
-    scene.add(grid);
+    // Grid (150 size, 150 divisions = 1m spacing)
+    gridHelper = new THREE.GridHelper(150, 150, 0x1a2030, 0x0f1520);
+    gridHelper.position.x = (W % 2 !== 0) ? 0.5 : 0.0;
+    gridHelper.position.y = -0.02;
+    gridHelper.position.z = (L % 2 !== 0) ? 0.5 : 0.0;
+    gridHelper.visible = guidesVisible;
+    scene.add(gridHelper);
 
     // Floor tiles
     generateCarpetTiles(W, L);
@@ -223,6 +231,27 @@ function init3D(W, L) {
     const line  = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x06b6d4 }));
     line.position.set(0, -0.01, 0);
     scene.add(line);
+
+    // Initialize TransformControls
+    transformControls = new THREE.TransformControls(camera, renderer.domElement);
+    transformControls.size = 0.75;
+    transformControls.addEventListener('change', () => {
+        if (renderer && scene && camera) renderer.render(scene, camera);
+    });
+    transformControls.addEventListener('dragging-changed', (event) => {
+        controls.enabled = !event.value;
+        if (event.value) {
+            if (selectedObject) _recordDragStart(selectedObject);
+        } else {
+            if (selectedObject) _commitDrag();
+        }
+    });
+    transformControls.addEventListener('objectChange', () => {
+        if (selectedObject) {
+            syncTransformPanel();
+        }
+    });
+    scene.add(transformControls);
 
     // ── DEFAULT LIGHTS ────────────────────────────────────────────────
     // Research: Start with "Exhibition Hall" preset — strong overhead + hemisphere fill
@@ -388,6 +417,11 @@ function onPointerDown(event) {
     mouse.y = -(event.clientY / innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
 
+    if (transformControls && transformControls.visible) {
+        const gizmoHits = raycaster.intersectObject(transformControls, true);
+        if (gizmoHits.length > 0) return;
+    }
+
     // ── PAINT MODE
     if (currentMode === 'paint') {
         const hits = raycaster.intersectObjects(floorTiles);
@@ -477,9 +511,9 @@ function onKeyDown(e) {
     switch (e.key) {
         case 'Delete': case 'Backspace': deleteSelectedItem(); break;
         case 'Escape': deselectObject(); deselectLight(); break;
-        case 'r': case 'R':
-            if (selectedObject) { _recordDragStart(selectedObject); selectedObject.rotation.y += Math.PI/4; _commitDrag(); syncTransformPanel(); }
-            break;
+        case 'w': case 'W': setGizmoMode('translate'); break;
+        case 'e': case 'E': setGizmoMode('rotate'); break;
+        case 'r': case 'R': setGizmoMode('scale'); break;
         case 'g': case 'G':
             gridSnapEnabled = !gridSnapEnabled;
             const sb = document.getElementById('snap-toggle-btn');
@@ -550,7 +584,16 @@ function selectObject(obj) {
     if (selectedObject) _clearOutline(selectedObject);
     selectedObject = obj;
     obj.userData.outlineHelper = new THREE.BoxHelper(obj, 0x06b6d4);
+    obj.userData.outlineHelper.visible = guidesVisible;
     scene.add(obj.userData.outlineHelper);
+    
+    if (transformControls) {
+        transformControls.attach(obj);
+        transformControls.visible = guidesVisible;
+    }
+    const gt = document.getElementById('gizmo-toolbar');
+    if (gt) gt.classList.remove('hidden');
+
     if (currentMode === 'paint') setMode('objects');
     updateUI();
     updateLayerList();
@@ -560,8 +603,61 @@ function deselectObject() {
     if (!selectedObject) return;
     _clearOutline(selectedObject);
     selectedObject = null;
+    
+    if (transformControls) transformControls.detach();
+    const gt = document.getElementById('gizmo-toolbar');
+    if (gt) gt.classList.add('hidden');
+
     updateUI();
     updateLayerList();
+}
+
+function setGizmoMode(mode) {
+    if (!transformControls) return;
+    transformControls.setMode(mode);
+    
+    const modes = ['translate', 'rotate', 'scale'];
+    modes.forEach(m => {
+        const btn = document.getElementById(`gizmo-mode-${m}`);
+        if (btn) {
+            if (m === mode) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    });
+}
+
+function toggleGuides() {
+    guidesVisible = !guidesVisible;
+    const btn = document.getElementById('toggle-guides-btn');
+    const iconShow = document.getElementById('toggle-guides-icon-show');
+    const iconHide = document.getElementById('toggle-guides-icon-hide');
+    const textSpan = document.getElementById('toggle-guides-text');
+    if (btn) {
+        if (guidesVisible) {
+            btn.classList.add('bg-cyan-500/15', 'text-cyan-300', 'border-cyan-500/30');
+            btn.classList.remove('bg-white/5', 'text-white/40', 'border-white/10');
+            if (iconShow) iconShow.classList.remove('hidden');
+            if (iconHide) iconHide.classList.add('hidden');
+            if (textSpan) textSpan.innerText = "แสดงเส้นไกด์ (Guides: ON)";
+        } else {
+            btn.classList.remove('bg-cyan-500/15', 'text-cyan-300', 'border-cyan-500/30');
+            btn.classList.add('bg-white/5', 'text-white/40', 'border-white/10');
+            if (iconShow) iconShow.classList.add('hidden');
+            if (iconHide) iconHide.classList.remove('hidden');
+            if (textSpan) textSpan.innerText = "ซ่อนเส้นไกด์ (Guides: OFF)";
+        }
+    }
+    if (gridHelper) gridHelper.visible = guidesVisible;
+    sceneLights.forEach(e => {
+        if (e.helper) e.helper.visible = guidesVisible && (e.light ? e.light.visible : true);
+        if (e.marker) e.marker.material.visible = guidesVisible && (e === selectedLight);
+    });
+    if (selectedObject?.userData?.outlineHelper) selectedObject.userData.outlineHelper.visible = guidesVisible;
+    if (transformControls) transformControls.visible = guidesVisible;
+    if (renderer && scene && camera) renderer.render(scene, camera);
 }
 
 function _clearOutline(obj) {
@@ -713,7 +809,11 @@ function _attachLightToScene(entry) {
     else if (type === 'point')  helper = new THREE.PointLightHelper(light, 0.5);
     else if (type === 'hemisphere') helper = new THREE.HemisphereLightHelper(light, 1.2);
 
-    if (helper) { scene.add(helper); entry.helper = helper; }
+    if (helper) {
+        helper.visible = guidesVisible;
+        scene.add(helper);
+        entry.helper = helper;
+    }
 
     // Invisible sphere marker for raycasting (for positioned lights)
     if (['directional','point','spot'].includes(type)) {
@@ -734,7 +834,7 @@ function selectLight(entry) {
 
     // Highlight marker
     if (entry.marker) {
-        entry.marker.material.visible = true;
+        entry.marker.material.visible = guidesVisible;
         entry.marker.material.color   = new THREE.Color(0x06b6d4);
         entry.marker.material.opacity = 0.4;
         entry.marker.material.transparent = true;
@@ -1453,3 +1553,5 @@ _g.renameLightEntry=renameLightEntry;
 _g.toggleLeftPanel     = toggleLeftPanel;
 _g.loadGLTFObject      = loadGLTFObject;
 _g.paintAllTiles       = paintAllTiles;
+_g.setGizmoMode        = setGizmoMode;
+_g.toggleGuides        = toggleGuides;
