@@ -45,11 +45,7 @@ const BASE_DIMS = {
     rollup:    { w: 0.8, h: 2.0,  d: 0.05 },
 };
 
-// ─── Procedural textures ──────────────────────────────────────────────────
-const texturePresets = {
-    sample_naiin: createNaiinPresetTexture(),
-    sample_kids:  createKidsPresetTexture(),
-};
+// (No procedural texture presets in v4.0)
 
 // ══════════════════════════════════════════════════════════════════════════
 // COMMAND PATTERN — UNDO / REDO
@@ -246,7 +242,6 @@ function init3D(W, L) {
     // Default backdrop
     const backdrop = spawnItem('backdrop', false);
     backdrop.position.set(0, 1.25, -L / 2 + 0.075);
-    applyTextureToObject(backdrop, texturePresets.sample_naiin);
 
     // Capture initial state AFTER spawning (so first action is undo-able)
     _undoStack = [];
@@ -551,12 +546,26 @@ function _clearOutline(obj) {
 
 function duplicateSelected() {
     if (!selectedObject) return;
-    const n = spawnItem(selectedObject.userData.type, false);
-    if (n) {
-        n.position.copy(selectedObject.position); n.position.x += 1;
-        n.rotation.copy(selectedObject.rotation); n.scale.copy(selectedObject.scale);
+    const type = selectedObject.userData.type;
+    let n;
+    if (type === 'custom') {
+        n = selectedObject.clone();
+        if (n.userData.outlineHelper) delete n.userData.outlineHelper;
+        n.position.copy(selectedObject.position);
+        n.position.x += 1;
+        scene.add(n);
+        draggableObjects.push(n);
+        updateLayerList();
         _cmdAddObject(n);
         selectObject(n);
+    } else {
+        n = spawnItem(type, false);
+        if (n) {
+            n.position.copy(selectedObject.position); n.position.x += 1;
+            n.rotation.copy(selectedObject.rotation); n.scale.copy(selectedObject.scale);
+            _cmdAddObject(n);
+            selectObject(n);
+        }
     }
 }
 
@@ -1000,6 +1009,19 @@ function syncTransformPanel() {
         _sv('dim-h', (ud.baseDims.h * s.y).toFixed(2));
         _sv('dim-d', (ud.baseDims.d * s.z).toFixed(2));
     }
+    
+    // Dynamic recommendation dimensions
+    const recText = document.getElementById('graphic-recommendation');
+    if (recText) {
+        const type = ud.type;
+        if (['backdrop','rollup'].includes(type) && ud.baseDims) {
+            const w = ud.baseDims.w * s.x;
+            const h = ud.baseDims.h * s.y;
+            recText.innerText = `แนะนำขนาดกราฟิก: ${Math.round(w * 100)} × ${Math.round(h * 100)} ซม.`;
+        } else {
+            recText.innerText = '';
+        }
+    }
 }
 
 function _tf(fn) {
@@ -1037,21 +1059,38 @@ function updateLayerList() {
         return;
     }
 
+    const OBJ_SVGS = {
+        backdrop: `<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>`,
+        table:    `<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12h18M5 12v8m14-8v8M7 12V8a2 2 0 012-2h6a2 2 0 012 2v4" /></svg>`,
+        bookshelf:`<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 12h16M4 18h16" /></svg>`,
+        cashier:  `<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>`,
+        rollup:   `<svg class="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2z" /></svg>`,
+        custom:   `<svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>`
+    };
+
+    const LIGHT_SVGS = {
+        ambient:    `<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>`,
+        hemisphere: `<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z" /></svg>`,
+        directional:`<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 5a7 7 0 110 14 7 7 0 010-14z" /></svg>`,
+        point:      `<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>`,
+        spot:       `<svg class="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>`
+    };
+
     // ── Objects section
     if (draggableObjects.length) {
         const objHeader = document.createElement('div');
         objHeader.className = 'section-label mb-1 mt-1';
-        objHeader.textContent = '📦 วัตถุ';
+        objHeader.textContent = 'วัตถุ (Objects)';
         c.appendChild(objHeader);
 
-        const objIcons = {backdrop:'🖼️', table:'🪑', bookshelf:'📚', cashier:'🖥️', rollup:'🪧'};
         [...draggableObjects].reverse().forEach(obj => {
             const sel = obj === selectedObject;
             const item = document.createElement('div');
             item.className = 'flex items-center space-x-2 px-2.5 py-1.5 rounded-xl cursor-pointer transition-all text-xs border ' +
                 (sel ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300' : 'bg-white/5 border-transparent hover:bg-white/10 text-white/75');
             item.onclick = () => { showLeftTab('layers'); selectObject(obj); };
-            item.innerHTML = `<span class="text-sm flex-shrink-0">${objIcons[obj.userData.type]||'📦'}</span><span class="flex-1 truncate font-medium">${obj.name}</span>${sel?'<span class="text-cyan-400 text-[9px]">✓</span>':''}`;
+            const svgIcon = OBJ_SVGS[obj.userData.type] || OBJ_SVGS.custom;
+            item.innerHTML = `${svgIcon}<span class="flex-1 truncate font-medium ml-1.5">${obj.name}</span>${sel?'<span class="text-cyan-400 text-[9px] flex-shrink-0">✓</span>':''}`;
             c.appendChild(item);
         });
     }
@@ -1060,7 +1099,7 @@ function updateLayerList() {
     if (sceneLights.length) {
         const lHeader = document.createElement('div');
         lHeader.className = 'section-label mb-1 mt-3';
-        lHeader.textContent = '💡 แสง';
+        lHeader.textContent = 'แสงไฟ (Lights)';
         c.appendChild(lHeader);
 
         [...sceneLights].reverse().forEach(entry => {
@@ -1069,34 +1108,118 @@ function updateLayerList() {
             item.className = 'flex items-center space-x-2 px-2.5 py-1.5 rounded-xl cursor-pointer transition-all text-xs border ' +
                 (sel ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300' : 'bg-white/5 border-transparent hover:bg-white/10 text-white/75');
             item.onclick = () => { showLeftTab('layers'); selectLight(entry); };
-            item.innerHTML = `<span class="text-sm flex-shrink-0">${LIGHT_ICONS[entry.type]||'💡'}</span><span class="flex-1 truncate font-medium">${entry.name}</span>${sel?'<span class="text-yellow-400 text-[9px]">✓</span>':''}`;
+            const svgIcon = LIGHT_SVGS[entry.type] || LIGHT_SVGS.point;
+            item.innerHTML = `${svgIcon}<span class="flex-1 truncate font-medium ml-1.5">${entry.name}</span>${sel?'<span class="text-yellow-400 text-[9px] flex-shrink-0">✓</span>':''}`;
             c.appendChild(item);
         });
     }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// MODE & TABS
+// MODE & TOGGLE FLOATING PANELS
 // ══════════════════════════════════════════════════════════════════════════
+let activeLeftPanel = null; // 'assets' | 'layers' | 'paint' | null
+
+function toggleLeftPanel(panelName) {
+    const panelEl = document.getElementById('left-floating-panel');
+    const titleEl = document.getElementById('left-panel-title');
+    const buttons = {
+        assets: document.getElementById('tab-btn-assets'),
+        layers: document.getElementById('tab-btn-layers'),
+        paint: document.getElementById('tab-btn-paint')
+    };
+    const titles = {
+        assets: 'เพิ่มวัตถุและแสงไฟ',
+        layers: 'รายการวัตถุในห้อง',
+        paint: 'ระบายสีพื้นพรม'
+    };
+    
+    // Toggle same panel
+    if (activeLeftPanel === panelName) {
+        activeLeftPanel = null;
+        panelEl.classList.add('hidden');
+        if (buttons[panelName]) buttons[panelName].classList.remove('active');
+        if (panelName === 'paint') currentMode = 'objects';
+        return;
+    }
+    
+    // Deactivate previous active button
+    if (activeLeftPanel && buttons[activeLeftPanel]) {
+        buttons[activeLeftPanel].classList.remove('active');
+    }
+    
+    // Activate new panel
+    activeLeftPanel = panelName;
+    panelEl.classList.remove('hidden');
+    if (buttons[panelName]) buttons[panelName].classList.add('active');
+    if (titleEl) titleEl.innerText = titles[panelName] || 'เครื่องมือ';
+    
+    // Show correct sub-panel
+    document.getElementById('panel-assets').classList.toggle('hidden', panelName !== 'assets');
+    document.getElementById('panel-layers').classList.toggle('hidden', panelName !== 'layers');
+    document.getElementById('panel-paint').classList.toggle('hidden', panelName !== 'paint');
+    
+    // Manage modes
+    if (panelName === 'paint') {
+        currentMode = 'paint';
+        deselectObject();
+        deselectLight();
+    } else {
+        currentMode = 'objects';
+    }
+
+    if (panelName === 'layers') {
+        updateLayerList();
+    }
+}
+
 function showLeftTab(tab) {
-    const act  = 'py-3 text-[10px] font-bold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all flex-1';
-    const inact = 'py-3 text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-all flex-1';
-    document.getElementById('tab-assets').className  = tab==='assets'  ? act : inact;
-    document.getElementById('tab-layers').className  = tab==='layers'  ? act : inact;
-    document.getElementById('panel-assets').classList.toggle('hidden',  tab!=='assets');
-    document.getElementById('panel-layers').classList.toggle('hidden',  tab!=='layers');
+    const panelEl = document.getElementById('left-floating-panel');
+    const titleEl = document.getElementById('left-panel-title');
+    const buttons = {
+        assets: document.getElementById('tab-btn-assets'),
+        layers: document.getElementById('tab-btn-layers'),
+        paint: document.getElementById('tab-btn-paint')
+    };
+    const titles = {
+        assets: 'เพิ่มวัตถุและแสงไฟ',
+        layers: 'รายการวัตถุในห้อง',
+        paint: 'ระบายสีพื้นพรม'
+    };
+
+    if (activeLeftPanel !== tab) {
+        if (activeLeftPanel && buttons[activeLeftPanel]) {
+            buttons[activeLeftPanel].classList.remove('active');
+        }
+        activeLeftPanel = tab;
+        panelEl.classList.remove('hidden');
+        if (buttons[tab]) buttons[tab].classList.add('active');
+        if (titleEl) titleEl.innerText = titles[tab] || 'เครื่องมือ';
+
+        document.getElementById('panel-assets').classList.toggle('hidden', tab !== 'assets');
+        document.getElementById('panel-layers').classList.toggle('hidden', tab !== 'layers');
+        document.getElementById('panel-paint').classList.toggle('hidden', tab !== 'paint');
+        
+        if (tab === 'paint') {
+            currentMode = 'paint';
+            deselectObject();
+            deselectLight();
+        } else {
+            currentMode = 'objects';
+        }
+    }
     if (tab === 'layers') updateLayerList();
 }
 
 function setMode(mode) {
     currentMode = mode;
-    const act  = 'py-3 text-[10px] font-bold uppercase tracking-wider text-cyan-400 border-b-2 border-cyan-400 bg-white/5 transition-all flex-1';
-    const inact = 'py-3 text-[10px] font-bold uppercase tracking-wider text-white/50 hover:text-white transition-all flex-1';
-    document.getElementById('tab-edit').className  = mode==='objects' ? act : inact;
-    document.getElementById('tab-paint').className = mode==='paint'   ? act : inact;
-    document.getElementById('panel-object-mode').classList.toggle('hidden',  mode==='paint');
-    document.getElementById('panel-paint-mode').classList.toggle('hidden',   mode!=='paint');
-    if (mode === 'paint') { deselectObject(); deselectLight(); }
+    if (mode === 'paint') {
+        deselectObject();
+        deselectLight();
+        if (activeLeftPanel !== 'paint') showLeftTab('paint');
+    } else {
+        if (activeLeftPanel === 'paint') toggleLeftPanel('paint');
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1108,7 +1231,7 @@ function selectCarpetBrush(color) {
     const h = document.getElementById('carpet-brush-hex');
     if (p) p.value = color;
     if (h) h.innerText = color.toUpperCase() + ' (Active)';
-    if (currentMode !== 'paint') setMode('paint');
+    if (activeLeftPanel !== 'paint') showLeftTab('paint');
 }
 
 function changeSelectedColor(hex) {
@@ -1128,8 +1251,6 @@ function uploadTexture(input) {
     reader.onload = e => { const img = new Image(); img.src = e.target.result; img.onload = () => { const t = new THREE.Texture(img); t.needsUpdate = true; applyTextureToObject(selectedObject, t); }; };
     reader.readAsDataURL(input.files[0]);
 }
-
-function applyPresetTexture(key) { if (selectedObject && texturePresets[key]) applyTextureToObject(selectedObject, texturePresets[key]); }
 
 function applyTextureToObject(obj, texture) {
     texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -1157,10 +1278,7 @@ function toggleAutoRotate() {
     controls.autoRotate = autoRotateEnabled;
     const btn = document.getElementById('btn-auto-rotate');
     if (btn) {
-        btn.textContent = autoRotateEnabled ? '⏸ Stop Rotate' : '🔄 Auto Rotate';
-        btn.classList.toggle('bg-cyan-500/20', autoRotateEnabled);
-        btn.classList.toggle('border-cyan-500/40', autoRotateEnabled);
-        btn.classList.toggle('text-cyan-300', autoRotateEnabled);
+        btn.classList.toggle('active', autoRotateEnabled);
     }
 }
 
@@ -1175,8 +1293,17 @@ function toggleLightMode() {
         scene.background = new THREE.Color(bg);
         if (scene.fog) scene.fog.color.set(bg);
     }
-    const btn = document.getElementById('light-mode-btn');
-    if (btn) btn.textContent = isLightMode ? '🌙 Dark' : '☀️ Light';
+    const moonIcon = document.getElementById('theme-icon-moon');
+    const sunIcon = document.getElementById('theme-icon-sun');
+    if (moonIcon && sunIcon) {
+        if (isLightMode) {
+            moonIcon.classList.add('hidden');
+            sunIcon.classList.remove('hidden');
+        } else {
+            moonIcon.classList.remove('hidden');
+            sunIcon.classList.add('hidden');
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1192,42 +1319,58 @@ function captureMockup() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// PROCEDURAL TEXTURES
+// CUSTOM GLTF MODEL LOADER
 // ══════════════════════════════════════════════════════════════════════════
-function createNaiinPresetTexture() {
-    const c = document.createElement('canvas'); c.width = 2048; c.height = 256;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle='#0f172a'; ctx.fillRect(0,0,2048,256);
-    ctx.fillStyle='#f97316'; ctx.beginPath(); ctx.moveTo(100,0); ctx.lineTo(250,0); ctx.lineTo(150,256); ctx.lineTo(0,256); ctx.fill();
-    ctx.fillStyle='#ea580c'; ctx.beginPath(); ctx.moveTo(250,0); ctx.lineTo(350,0); ctx.lineTo(250,256); ctx.lineTo(150,256); ctx.fill();
-    ctx.strokeStyle='#06b6d4'; ctx.lineWidth=4; ctx.strokeRect(550,40,948,176);
-    ctx.fillStyle='#ffffff'; ctx.font='bold 56px sans-serif'; ctx.fillText('ร้านนายอินทร์ NAIIN ROADSHOW 2026',620,110);
-    ctx.fillStyle='#f97316'; ctx.font='500 36px sans-serif'; ctx.fillText('@ MRT พหลโยธิน - ขีดความสุขของการอ่านหนังสือ',620,170);
-    ctx.fillStyle='#a855f7'; ctx.beginPath(); ctx.arc(1750,128,60,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#ffffff'; ctx.font='bold 70px sans-serif'; ctx.fillText('📚',1715,150);
-    return new THREE.CanvasTexture(c);
-}
-
-function createKidsPresetTexture() {
-    const c = document.createElement('canvas'); c.width = 2048; c.height = 256;
-    const ctx = c.getContext('2d');
-    const g = ctx.createLinearGradient(0,0,2048,0); g.addColorStop(0,'#a855f7'); g.addColorStop(1,'#ec4899');
-    ctx.fillStyle=g; ctx.fillRect(0,0,2048,256);
-    ctx.fillStyle='rgba(255,255,255,0.15)';
-    for(let i=0;i<15;i++){ctx.beginPath();ctx.arc(Math.random()*2048,Math.random()*256,20+Math.random()*50,0,Math.PI*2);ctx.fill();}
-    ctx.fillStyle='#ffffff'; ctx.shadowColor='rgba(0,0,0,0.3)'; ctx.shadowBlur=10;
-    ctx.font='bold 72px sans-serif'; ctx.fillText('นายอินทร์ KIDS & MANGA FAIR 🧸',480,120);
-    ctx.shadowBlur=0; ctx.fillStyle='#fef08a'; ctx.font='bold 36px sans-serif';
-    ctx.fillText('ลดสูงสุด 50% • การ์ตูน วรรณกรรมเยาวชน และไลท์โนเวลครบครันที่นี่!',485,180);
-    ctx.fillStyle='#fef08a'; _star(ctx,300,128,5,50,20); _star(ctx,1750,128,5,50,20);
-    return new THREE.CanvasTexture(c);
-}
-
-function _star(ctx,cx,cy,spikes,outer,inner){
-    let rot=Math.PI/2*3,x=cx,y=cy,step=Math.PI/spikes;
-    ctx.beginPath();ctx.moveTo(cx,cy-outer);
-    for(let i=0;i<spikes;i++){x=cx+Math.cos(rot)*outer;y=cy+Math.sin(rot)*outer;ctx.lineTo(x,y);rot+=step;x=cx+Math.cos(rot)*inner;y=cy+Math.sin(rot)*inner;ctx.lineTo(x,y);rot+=step;}
-    ctx.lineTo(cx,cy-outer);ctx.closePath();ctx.fill();
+function loadGLTFObject(file) {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const loader = new THREE.GLTFLoader();
+    
+    loader.load(url, (gltf) => {
+        const model = gltf.scene;
+        
+        // Enable shadows for custom model meshes
+        model.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+        
+        // Calculate dimensions
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        
+        // Align model center X/Z and Y-bottom on floor
+        model.position.x = -center.x;
+        model.position.z = -center.z;
+        model.position.y = -box.min.y;
+        
+        // Wrap in parent group for clean transformation anchors
+        const wrapper = new THREE.Group();
+        wrapper.add(model);
+        wrapper.name = file.name.replace(/\.[^.]+$/, '');
+        wrapper.userData = {
+            type: 'custom',
+            category: 'prop',
+            baseDims: { w: size.x, h: size.y, d: size.z }
+        };
+        
+        // Position at spawn coordinates (origin)
+        wrapper.position.set(0, 0, 0);
+        
+        scene.add(wrapper);
+        draggableObjects.push(wrapper);
+        updateLayerList();
+        
+        _cmdAddObject(wrapper);
+        selectObject(wrapper);
+        URL.revokeObjectURL(url);
+    }, undefined, (error) => {
+        console.error("Error loading GLTF model:", error);
+        alert("ไม่สามารถโหลดไฟล์ 3D นี้ได้ กรุณาตรวจสอบว่าเป็นไฟล์ GLTF/GLB ที่ถูกต้อง");
+    });
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1255,7 +1398,6 @@ _g.deleteSelectedItem  = deleteSelectedItem;
 _g.clearAllWorkspace   = clearAllWorkspace;
 _g.changeSelectedColor = changeSelectedColor;
 _g.uploadTexture       = uploadTexture;
-_g.applyPresetTexture  = applyPresetTexture;
 _g.setCameraAngle      = setCameraAngle;
 _g.captureMockup       = captureMockup;
 _g.duplicateSelected   = duplicateSelected;
@@ -1280,3 +1422,5 @@ _g.setLightTgtX=setLightTgtX; _g.setLightTgtY=setLightTgtY; _g.setLightTgtZ=setL
 _g.setLightAngle=setLightAngle; _g.setLightPenumbra=setLightPenumbra; _g.setLightDistance=setLightDistance;
 _g.setLightSkyColor=setLightSkyColor; _g.setLightGroundColor=setLightGroundColor;
 _g.renameLightEntry=renameLightEntry;
+_g.toggleLeftPanel     = toggleLeftPanel;
+_g.loadGLTFObject      = loadGLTFObject;
