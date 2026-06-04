@@ -16,6 +16,9 @@ let floorTilesMesh = null;
 let selectedObject = null;
 let selectedObjects = [];
 let tempTransformGroup = null;
+let selectionAnchor = null;
+let _anchorStartMatrix = null;
+let _anchorTargetStarts = [];
 let proposalModeActive = false;
 let commentPinModeActive = false;
 let commentPins = [];
@@ -174,11 +177,7 @@ function _commitDrag() {
                     s.obj.quaternion.copy(s.q);
                     s.obj.scale.copy(s.scl);
                 });
-                _createTempTransformGroup();
-                if (transformControls && selectedObjects.length > 1) {
-                    transformControls.attach(tempTransformGroup);
-                    transformControls.visible = guidesVisible;
-                }
+                _syncSelectionAnchor();
                 syncTransformPanel();
             },
             redo() {
@@ -188,11 +187,7 @@ function _commitDrag() {
                     s.obj.quaternion.copy(s.q);
                     s.obj.scale.copy(s.scl);
                 });
-                _createTempTransformGroup();
-                if (transformControls && selectedObjects.length > 1) {
-                    transformControls.attach(tempTransformGroup);
-                    transformControls.visible = guidesVisible;
-                }
+                _syncSelectionAnchor();
                 syncTransformPanel();
             }
         });
@@ -210,8 +205,8 @@ function _commitDrag() {
         Math.abs(rot.y - newRot.y) < 0.001 &&
         Math.abs(rot.z - newRot.z) < 0.001) return; // no meaningful change
     _pushCmd({
-        undo() { obj.position.copy(pos); obj.rotation.copy(rot); obj.scale.copy(scl); if (selectedObject === obj) syncTransformPanel(); },
-        redo() { obj.position.copy(newPos); obj.rotation.copy(newRot); obj.scale.copy(newScl); if (selectedObject === obj) syncTransformPanel(); }
+        undo() { obj.position.copy(pos); obj.rotation.copy(rot); obj.scale.copy(scl); if (selectedObject === obj) { _syncSelectionAnchor(); syncTransformPanel(); } },
+        redo() { obj.position.copy(newPos); obj.rotation.copy(newRot); obj.scale.copy(newScl); if (selectedObject === obj) { _syncSelectionAnchor(); syncTransformPanel(); } }
     });
 }
 
@@ -369,13 +364,20 @@ function init3D(W, L) {
         _isGizmoDragging = event.value;
         controls.enabled = !event.value;
         if (event.value) {
-            if (selectedObject) _recordDragStart(selectedObject);
+            if (selectedObjects.length > 0) {
+                _recordDragStart(selectedObjects.length === 1 ? selectedObjects[0] : selectionAnchor);
+                _beginAnchorTransform();
+            }
         } else {
-            if (selectedObject) _commitDrag();
+            if (selectedObjects.length > 0) {
+                _finishAnchorTransform();
+                _commitDrag();
+            }
         }
     });
     transformControls.addEventListener('objectChange', () => {
-        if (selectedObject) {
+        if (selectedObjects.length > 0) {
+            _applyAnchorDeltaToSelection();
             syncTransformPanel();
         }
     });
@@ -687,7 +689,7 @@ function onPointerDown(event) {
             y: event.clientY,
         };
         _selectSceneObject(target, event);
-        if (selectedObject && transformControls && transformControls.mode === 'translate') {
+        if (selectedObjects.length === 1 && selectedObject && transformControls && transformControls.mode === 'translate') {
             isDragging = true;
             controls.enabled = false;
             _recordDragStart(selectedObject);
@@ -735,6 +737,7 @@ function onPointerMove(event) {
         p.z = Math.max(-(spaceLength/2+3), Math.min(spaceLength/2+3, p.z));
         selectedObject.position.x = p.x;
         selectedObject.position.z = p.z;
+        _syncSelectionAnchor();
         syncTransformPanel();
     }
 }
@@ -757,15 +760,11 @@ function onPointerUp(event) {
     isDragging = false;
     controls.enabled = true;
     if (selectedObjects.length > 1) {
-        _destroyTempTransformGroup();
         _commitDrag();
-        _createTempTransformGroup();
-        if (transformControls) {
-            transformControls.attach(tempTransformGroup);
-            transformControls.visible = guidesVisible;
-        }
+        _syncSelectionAnchor();
     } else {
         _commitDrag();
+        _syncSelectionAnchor();
     }
     _commitTileBatch();
 }
@@ -908,6 +907,88 @@ function _clearAllOutlines() {
     selectedObjects.forEach(obj => _clearOutline(obj));
 }
 
+function _getSelectionCenter(targets = selectedObjects) {
+    const box = new THREE.Box3();
+    targets.forEach(obj => {
+        obj.updateMatrixWorld(true);
+        box.expandByObject(obj);
+    });
+    const center = new THREE.Vector3();
+    if (box.isEmpty()) return center;
+    box.getCenter(center);
+    return center;
+}
+
+function _destroySelectionAnchor() {
+    if (transformControls) transformControls.detach();
+    if (selectionAnchor) {
+        scene.remove(selectionAnchor);
+        selectionAnchor = null;
+    }
+    _anchorStartMatrix = null;
+    _anchorTargetStarts = [];
+}
+
+function _syncSelectionAnchor() {
+    if (!transformControls || selectedObjects.length === 0) {
+        _destroySelectionAnchor();
+        return;
+    }
+    const center = _getSelectionCenter();
+    if (!selectionAnchor) {
+        selectionAnchor = new THREE.Object3D();
+        selectionAnchor.name = 'SelectionAnchor';
+        scene.add(selectionAnchor);
+    }
+    selectionAnchor.position.copy(center);
+    selectionAnchor.rotation.set(0, 0, 0);
+    selectionAnchor.scale.set(1, 1, 1);
+    selectionAnchor.updateMatrixWorld(true);
+    transformControls.attach(selectionAnchor);
+    transformControls.visible = guidesVisible;
+}
+
+function _beginAnchorTransform() {
+    if (!selectionAnchor || selectedObjects.length === 0) return;
+    selectionAnchor.updateMatrixWorld(true);
+    _anchorStartMatrix = selectionAnchor.matrixWorld.clone();
+    _anchorTargetStarts = selectedObjects.map(obj => {
+        obj.updateMatrixWorld(true);
+        const parentInv = new THREE.Matrix4();
+        if (obj.parent) {
+            obj.parent.updateMatrixWorld(true);
+            parentInv.copy(obj.parent.matrixWorld).invert();
+        }
+        return {
+            obj,
+            matrixWorld: obj.matrixWorld.clone(),
+            parentInv,
+        };
+    });
+}
+
+function _applyAnchorDeltaToSelection() {
+    if (!selectionAnchor || !_anchorStartMatrix || !_anchorTargetStarts.length) return;
+    selectionAnchor.updateMatrixWorld(true);
+    const delta = new THREE.Matrix4().multiplyMatrices(
+        selectionAnchor.matrixWorld,
+        new THREE.Matrix4().copy(_anchorStartMatrix).invert()
+    );
+    _anchorTargetStarts.forEach(start => {
+        const nextWorld = new THREE.Matrix4().multiplyMatrices(delta, start.matrixWorld);
+        const nextLocal = new THREE.Matrix4().multiplyMatrices(start.parentInv, nextWorld);
+        nextLocal.decompose(start.obj.position, start.obj.quaternion, start.obj.scale);
+        if (start.obj.userData.outlineHelper) start.obj.userData.outlineHelper.update();
+    });
+}
+
+function _finishAnchorTransform() {
+    _applyAnchorDeltaToSelection();
+    _anchorStartMatrix = null;
+    _anchorTargetStarts = [];
+    _syncSelectionAnchor();
+}
+
 function selectObject(obj, append = false) {
     if (selectedLight) {
         if (selectedLight.marker) selectedLight.marker.material.visible = false;
@@ -915,6 +996,7 @@ function selectObject(obj, append = false) {
     }
     
     _destroyTempTransformGroup();
+    _destroySelectionAnchor();
     
     if (append) {
         const idx = selectedObjects.indexOf(obj);
@@ -937,23 +1019,17 @@ function selectObject(obj, append = false) {
     
     if (selectedObjects.length === 0) {
         selectedObject = null;
-        if (transformControls) transformControls.detach();
+        _destroySelectionAnchor();
         const gt = document.getElementById('gizmo-toolbar');
         if (gt) gt.classList.add('hidden');
     } else if (selectedObjects.length === 1) {
         selectedObject = selectedObjects[0];
-        if (transformControls) {
-            transformControls.attach(selectedObject);
-            transformControls.visible = guidesVisible;
-        }
+        _syncSelectionAnchor();
         const gt = document.getElementById('gizmo-toolbar');
         if (gt) gt.classList.remove('hidden');
     } else {
-        _createTempTransformGroup();
-        if (transformControls) {
-            transformControls.attach(tempTransformGroup);
-            transformControls.visible = guidesVisible;
-        }
+        _syncSelectionAnchor();
+        selectedObject = selectionAnchor;
         const gt = document.getElementById('gizmo-toolbar');
         if (gt) gt.classList.remove('hidden');
     }
@@ -970,8 +1046,8 @@ function deselectObject() {
     selectedObject = null;
     
     _destroyTempTransformGroup();
+    _destroySelectionAnchor();
     
-    if (transformControls) transformControls.detach();
     const gt = document.getElementById('gizmo-toolbar');
     if (gt) gt.classList.add('hidden');
 
@@ -1845,9 +1921,19 @@ function syncTransformPanel() {
 
 function _tf(fn) {
     if (!selectedObject) return;
-    _recordDragStart(selectedObject);
-    fn(selectedObject);
-    _commitDrag();
+    if (selectedObjects.length > 1 && selectionAnchor) {
+        _recordDragStart(selectionAnchor);
+        _beginAnchorTransform();
+        fn(selectionAnchor);
+        selectionAnchor.updateMatrixWorld(true);
+        _finishAnchorTransform();
+        _commitDrag();
+    } else {
+        _recordDragStart(selectedObject);
+        fn(selectedObject);
+        _commitDrag();
+        _syncSelectionAnchor();
+    }
     syncTransformPanel();
 }
 function setPositionX(v){ _tf(o=>o.position.x=parseFloat(v)||0); }
