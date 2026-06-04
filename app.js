@@ -7,6 +7,12 @@ let scene, camera, renderer, controls, transformControls, gridHelper;
 let draggableObjects = [];
 let floorTiles = [];
 let selectedObject = null;
+let selectedObjects = [];
+let tempTransformGroup = null;
+let proposalModeActive = false;
+let commentPinModeActive = false;
+let commentPins = [];
+let _pinId = 0;
 let selectedLight = null;
 let isDragging = false;
 let plane;
@@ -24,6 +30,7 @@ let _undoStack = [];
 let _redoStack = [];
 const MAX_UNDO = 50;
 let _dragStart = null; // {obj|entry, pos, rot, scl} recorded at pointerdown
+let _multiDragStart = [];
 
 // ─── App State ────────────────────────────────────────────────────────────
 let currentMode         = 'objects';
@@ -107,9 +114,79 @@ function _recordDragStart(obj) {
         rot: new THREE.Euler(obj.rotation.x, obj.rotation.y, obj.rotation.z, obj.rotation.order),
         scl: obj.scale.clone(),
     };
+    _multiDragStart = selectedObjects.map(o => {
+        o.updateMatrixWorld(true);
+        const pos = new THREE.Vector3();
+        const q = new THREE.Quaternion();
+        const scl = new THREE.Vector3();
+        o.matrixWorld.decompose(pos, q, scl);
+        return {
+            obj: o,
+            pos,
+            q,
+            scl
+        };
+    });
 }
 
 function _commitDrag() {
+    if (selectedObjects.length > 1) {
+        if (!_multiDragStart.length) return;
+        let hasChanged = false;
+        const newStates = selectedObjects.map(o => {
+            o.updateMatrixWorld(true);
+            const start = _multiDragStart.find(s => s.obj === o);
+            const pos = new THREE.Vector3();
+            const q = new THREE.Quaternion();
+            const scl = new THREE.Vector3();
+            o.matrixWorld.decompose(pos, q, scl);
+            
+            if (start) {
+                if (start.pos.distanceTo(pos) > 0.001 || start.scl.distanceTo(scl) > 0.001 ||
+                    start.q.angleTo(q) > 0.001) {
+                    hasChanged = true;
+                }
+            }
+            return { obj: o, pos, q, scl };
+        });
+        const oldStates = [..._multiDragStart];
+        _multiDragStart = [];
+        _dragStart = null;
+        if (!hasChanged) return;
+        
+        _pushCmd({
+            undo() {
+                _destroyTempTransformGroup();
+                oldStates.forEach(s => {
+                    s.obj.position.copy(s.pos);
+                    s.obj.quaternion.copy(s.q);
+                    s.obj.scale.copy(s.scl);
+                });
+                _createTempTransformGroup();
+                if (transformControls && selectedObjects.length > 1) {
+                    transformControls.attach(tempTransformGroup);
+                    transformControls.visible = guidesVisible;
+                }
+                syncTransformPanel();
+            },
+            redo() {
+                _destroyTempTransformGroup();
+                newStates.forEach(s => {
+                    s.obj.position.copy(s.pos);
+                    s.obj.quaternion.copy(s.q);
+                    s.obj.scale.copy(s.scl);
+                });
+                _createTempTransformGroup();
+                if (transformControls && selectedObjects.length > 1) {
+                    transformControls.attach(tempTransformGroup);
+                    transformControls.visible = guidesVisible;
+                }
+                syncTransformPanel();
+            }
+        });
+        return;
+    }
+
     if (!_dragStart) return;
     const { obj, pos, rot, scl } = _dragStart;
     _dragStart = null;
@@ -417,6 +494,47 @@ function onPointerDown(event) {
     mouse.y = -(event.clientY / innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
 
+    // ── PROPOSAL / COMMENT PIN PLACE MODE
+    if (proposalModeActive) {
+        if (commentPinModeActive) {
+            // Raycast against draggableObjects and floorTiles
+            const allTargets = [...draggableObjects, ...floorTiles];
+            const hits = raycaster.intersectObjects(allTargets, true);
+            if (hits.length > 0) {
+                event.stopPropagation();
+                const hitPoint = hits[0].point;
+                _pinId++;
+                const newPin = {
+                    id: _pinId,
+                    position: hitPoint.clone(),
+                    text: '',
+                    isEditing: true
+                };
+                commentPins.push(newPin);
+                commentPinModeActive = false;
+                
+                // Update pin mode button UI
+                const btn = document.getElementById('prop-btn-pin');
+                const btnText = document.getElementById('prop-pin-btn-text');
+                if (btn) btn.classList.remove('active');
+                if (btnText) btnText.innerText = "ปักหมุด (Pin Comment)";
+                
+                renderCommentPins();
+                updateProposalCommentsList();
+                
+                // Focus the newly spawned pin's textarea
+                setTimeout(() => {
+                    const activePinEl = document.getElementById(`pin-dom-${newPin.id}`);
+                    if (activePinEl) {
+                        const ta = activePinEl.querySelector('textarea');
+                        if (ta) ta.focus();
+                    }
+                }, 50);
+            }
+        }
+        return; // Don't do standard object editing/selection when in proposal mode
+    }
+
     if (transformControls && transformControls.visible) {
         const gizmoHits = raycaster.intersectObject(transformControls, true);
         if (gizmoHits.length > 0) return;
@@ -440,12 +558,15 @@ function onPointerDown(event) {
         if (target) {
             event.stopPropagation();
             deselectLight();
-            selectObject(target);
-            isDragging = true;
-            controls.enabled = false;
-            _recordDragStart(target);
-            const ph = raycaster.intersectObject(plane);
-            if (ph.length > 0) { dragOffset.copy(target.position).sub(ph[0].point); dragOffset.y = 0; }
+            const append = event.shiftKey || event.ctrlKey || event.metaKey;
+            selectObject(target, append);
+            if (selectedObject) {
+                isDragging = true;
+                controls.enabled = false;
+                _recordDragStart(selectedObject);
+                const ph = raycaster.intersectObject(plane);
+                if (ph.length > 0) { dragOffset.copy(selectedObject.position).sub(ph[0].point); dragOffset.y = 0; }
+            }
             return;
         }
     }
@@ -498,7 +619,17 @@ function onPointerMove(event) {
 function onPointerUp() {
     isDragging = false;
     controls.enabled = true;
-    _commitDrag();
+    if (selectedObjects.length > 1) {
+        _destroyTempTransformGroup();
+        _commitDrag();
+        _createTempTransformGroup();
+        if (transformControls) {
+            transformControls.attach(tempTransformGroup);
+            transformControls.visible = guidesVisible;
+        }
+    } else {
+        _commitDrag();
+    }
     _commitTileBatch();
 }
 
@@ -572,37 +703,109 @@ function paintAllTiles() {
 // ══════════════════════════════════════════════════════════════════════════
 // OBJECT SELECTION
 // ══════════════════════════════════════════════════════════════════════════
-function selectObject(obj) {
-    if (selectedObject === obj) return;
+function _createTempTransformGroup() {
+    _destroyTempTransformGroup();
+    if (selectedObjects.length <= 1) return;
     
-    // Clear light selection quietly to prevent UI properties display conflict
+    tempTransformGroup = new THREE.Group();
+    tempTransformGroup.name = "TempTransformGroup";
+    
+    const box = new THREE.Box3();
+    selectedObjects.forEach(obj => box.expandByObject(obj));
+    
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    center.y = 0; // Keep on floor level
+    
+    tempTransformGroup.position.copy(center);
+    scene.add(tempTransformGroup);
+    
+    // Attach selected items to group (preserving world transform)
+    selectedObjects.forEach(obj => {
+        tempTransformGroup.attach(obj);
+    });
+    
+    selectedObject = tempTransformGroup;
+}
+
+function _destroyTempTransformGroup() {
+    if (!tempTransformGroup) return;
+    
+    const children = [...tempTransformGroup.children];
+    children.forEach(child => {
+        scene.attach(child);
+    });
+    
+    scene.remove(tempTransformGroup);
+    tempTransformGroup = null;
+}
+
+function _clearAllOutlines() {
+    selectedObjects.forEach(obj => _clearOutline(obj));
+}
+
+function selectObject(obj, append = false) {
     if (selectedLight) {
         if (selectedLight.marker) selectedLight.marker.material.visible = false;
         selectedLight = null;
     }
     
-    if (selectedObject) _clearOutline(selectedObject);
-    selectedObject = obj;
-    obj.userData.outlineHelper = new THREE.BoxHelper(obj, 0x06b6d4);
-    obj.userData.outlineHelper.visible = guidesVisible;
-    scene.add(obj.userData.outlineHelper);
+    _destroyTempTransformGroup();
     
-    if (transformControls) {
-        transformControls.attach(obj);
-        transformControls.visible = guidesVisible;
+    if (append) {
+        const idx = selectedObjects.indexOf(obj);
+        if (idx > -1) {
+            _clearOutline(obj);
+            selectedObjects.splice(idx, 1);
+        } else {
+            selectedObjects.push(obj);
+            obj.userData.outlineHelper = new THREE.BoxHelper(obj, 0x06b6d4);
+            obj.userData.outlineHelper.visible = guidesVisible;
+            scene.add(obj.userData.outlineHelper);
+        }
+    } else {
+        _clearAllOutlines();
+        selectedObjects = [obj];
+        obj.userData.outlineHelper = new THREE.BoxHelper(obj, 0x06b6d4);
+        obj.userData.outlineHelper.visible = guidesVisible;
+        scene.add(obj.userData.outlineHelper);
     }
-    const gt = document.getElementById('gizmo-toolbar');
-    if (gt) gt.classList.remove('hidden');
-
+    
+    if (selectedObjects.length === 0) {
+        selectedObject = null;
+        if (transformControls) transformControls.detach();
+        const gt = document.getElementById('gizmo-toolbar');
+        if (gt) gt.classList.add('hidden');
+    } else if (selectedObjects.length === 1) {
+        selectedObject = selectedObjects[0];
+        if (transformControls) {
+            transformControls.attach(selectedObject);
+            transformControls.visible = guidesVisible;
+        }
+        const gt = document.getElementById('gizmo-toolbar');
+        if (gt) gt.classList.remove('hidden');
+    } else {
+        _createTempTransformGroup();
+        if (transformControls) {
+            transformControls.attach(tempTransformGroup);
+            transformControls.visible = guidesVisible;
+        }
+        const gt = document.getElementById('gizmo-toolbar');
+        if (gt) gt.classList.remove('hidden');
+    }
+    
     if (currentMode === 'paint') setMode('objects');
     updateUI();
     updateLayerList();
 }
 
 function deselectObject() {
-    if (!selectedObject) return;
-    _clearOutline(selectedObject);
+    if (selectedObjects.length === 0) return;
+    _clearAllOutlines();
+    selectedObjects = [];
     selectedObject = null;
+    
+    _destroyTempTransformGroup();
     
     if (transformControls) transformControls.detach();
     const gt = document.getElementById('gizmo-toolbar');
@@ -610,6 +813,113 @@ function deselectObject() {
 
     updateUI();
     updateLayerList();
+}
+
+function groupSelected() {
+    if (selectedObjects.length <= 1) return;
+    
+    _destroyTempTransformGroup();
+    
+    const group = new THREE.Group();
+    group.name = `กลุ่ม #${_countType('group') + 1}`;
+    
+    const box = new THREE.Box3();
+    selectedObjects.forEach(obj => box.expandByObject(obj));
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    center.y = 0;
+    
+    group.position.copy(center);
+    scene.add(group);
+    
+    const items = [...selectedObjects];
+    items.forEach(obj => {
+        group.attach(obj);
+        const idx = draggableObjects.indexOf(obj);
+        if (idx > -1) draggableObjects.splice(idx, 1);
+    });
+    
+    group.userData = {
+        type: 'group',
+        category: 'prop',
+        children: items
+    };
+    
+    draggableObjects.push(group);
+    
+    _pushCmd({
+        undo() {
+            const idx = draggableObjects.indexOf(group);
+            if (idx > -1) draggableObjects.splice(idx, 1);
+            
+            items.forEach(obj => {
+                scene.attach(obj);
+                draggableObjects.push(obj);
+            });
+            scene.remove(group);
+            
+            selectObject(items[0]);
+            items.slice(1).forEach(item => selectObject(item, true));
+        },
+        redo() {
+            items.forEach(obj => {
+                group.attach(obj);
+                const idx = draggableObjects.indexOf(obj);
+                if (idx > -1) draggableObjects.splice(idx, 1);
+            });
+            scene.add(group);
+            draggableObjects.push(group);
+            selectObject(group);
+        }
+    });
+    
+    selectObject(group);
+}
+
+function ungroupSelected() {
+    if (selectedObjects.length !== 1) return;
+    const group = selectedObjects[0];
+    if (group.userData?.type !== 'group') return;
+    
+    const items = [...group.children];
+    
+    const idx = draggableObjects.indexOf(group);
+    if (idx > -1) draggableObjects.splice(idx, 1);
+    
+    items.forEach(obj => {
+        scene.attach(obj);
+        draggableObjects.push(obj);
+    });
+    scene.remove(group);
+    
+    _pushCmd({
+        undo() {
+            items.forEach(obj => {
+                group.attach(obj);
+                const idx = draggableObjects.indexOf(obj);
+                if (idx > -1) draggableObjects.splice(idx, 1);
+            });
+            scene.add(group);
+            draggableObjects.push(group);
+            selectObject(group);
+        },
+        redo() {
+            const idx = draggableObjects.indexOf(group);
+            if (idx > -1) draggableObjects.splice(idx, 1);
+            
+            items.forEach(obj => {
+                scene.attach(obj);
+                draggableObjects.push(obj);
+            });
+            scene.remove(group);
+            
+            selectObject(items[0]);
+            items.slice(1).forEach(item => selectObject(item, true));
+        }
+    });
+    
+    selectObject(items[0]);
+    items.slice(1).forEach(item => selectObject(item, true));
 }
 
 function setGizmoMode(mode) {
@@ -669,36 +979,110 @@ function _clearOutline(obj) {
 }
 
 function duplicateSelected() {
-    if (!selectedObject) return;
-    const type = selectedObject.userData.type;
-    let n;
-    if (type === 'custom') {
-        n = selectedObject.clone();
-        if (n.userData.outlineHelper) delete n.userData.outlineHelper;
-        n.position.copy(selectedObject.position);
-        n.position.x += 1;
-        scene.add(n);
-        draggableObjects.push(n);
-        updateLayerList();
-        _cmdAddObject(n);
-        selectObject(n);
-    } else {
-        n = spawnItem(type, false);
-        if (n) {
-            n.position.copy(selectedObject.position); n.position.x += 1;
-            n.rotation.copy(selectedObject.rotation); n.scale.copy(selectedObject.scale);
-            _cmdAddObject(n);
-            selectObject(n);
+    if (selectedObjects.length === 0) return;
+    
+    _destroyTempTransformGroup();
+    const newSelection = [];
+    const cmds = [];
+    const originalSelection = [...selectedObjects];
+    
+    selectedObjects.forEach(obj => {
+        const type = obj.userData.type;
+        let n;
+        if (type === 'custom' || type === 'group') {
+            n = obj.clone();
+            n.traverse(c => {
+                if (c.userData && c.userData.outlineHelper) delete c.userData.outlineHelper;
+            });
+            n.position.copy(obj.position);
+            n.position.x += 1;
+            scene.add(n);
+            draggableObjects.push(n);
+        } else {
+            n = spawnItem(type, false);
+            if (n) {
+                n.position.copy(obj.position);
+                n.position.x += 1;
+                n.rotation.copy(obj.rotation);
+                n.scale.copy(obj.scale);
+            }
         }
+        if (n) {
+            newSelection.push(n);
+            cmds.push(n);
+        }
+    });
+    
+    if (cmds.length > 0) {
+        _pushCmd({
+            undo() {
+                _destroyTempTransformGroup();
+                _clearAllOutlines();
+                cmds.forEach(n => _removeFromScene(n));
+                selectedObjects = [];
+                selectedObject = null;
+                updateLayerList();
+                if (originalSelection.length > 0) {
+                    selectObject(originalSelection[0]);
+                    originalSelection.slice(1).forEach(item => selectObject(item, true));
+                }
+            },
+            redo() {
+                _destroyTempTransformGroup();
+                _clearAllOutlines();
+                cmds.forEach(n => {
+                    scene.add(n);
+                    draggableObjects.push(n);
+                });
+                updateLayerList();
+                if (newSelection.length > 0) {
+                    selectObject(newSelection[0]);
+                    newSelection.slice(1).forEach(item => selectObject(item, true));
+                }
+            }
+        });
+    }
+    
+    if (newSelection.length > 0) {
+        selectObject(newSelection[0]);
+        newSelection.slice(1).forEach(item => selectObject(item, true));
     }
 }
 
 function deleteSelectedItem() {
-    if (selectedObject) {
-        _cmdRemoveObject(selectedObject);
-        _removeFromScene(selectedObject);
+    if (selectedObjects.length > 0) {
+        _destroyTempTransformGroup();
+        const items = [...selectedObjects];
+        const indices = items.map(o => draggableObjects.indexOf(o));
+        
+        _clearAllOutlines();
+        items.forEach(obj => _removeFromScene(obj));
+        selectedObjects = [];
         selectedObject = null;
-        updateUI(); updateLayerList();
+        
+        _pushCmd({
+            undo() {
+                _destroyTempTransformGroup();
+                items.forEach((obj, i) => {
+                    _addToScene(obj, indices[i]);
+                });
+                updateLayerList();
+                selectObject(items[0]);
+                items.slice(1).forEach(item => selectObject(item, true));
+            },
+            redo() {
+                _destroyTempTransformGroup();
+                _clearAllOutlines();
+                items.forEach(obj => _removeFromScene(obj));
+                selectedObjects = [];
+                selectedObject = null;
+                updateLayerList();
+                updateUI();
+            }
+        });
+        
+        updateUI();
+        updateLayerList();
     } else if (selectedLight) {
         deleteLightEntry(selectedLight);
     }
@@ -1018,7 +1402,7 @@ function updateUI() {
         syncLightPanel();
         return;
     }
-    if (!selectedObject) {
+    if (selectedObjects.length === 0) {
         unsel.classList.remove('hidden');
         objSel.classList.add('hidden');
         lightSel.classList.add('hidden');
@@ -1028,27 +1412,54 @@ function updateUI() {
     lightSel.classList.add('hidden');
     objSel.classList.remove('hidden');
 
-    const type = selectedObject.userData.type;
-    document.getElementById('selected-title').innerText = selectedObject.name;
-    document.getElementById('selected-badge').innerText = type.toUpperCase();
-
     const colorCtrl   = document.getElementById('control-color');
     const textureCtrl = document.getElementById('control-texture');
-    if (['table','bookshelf','cashier'].includes(type)) {
-        colorCtrl.classList.remove('hidden');
-        textureCtrl.classList.add('hidden');
-        const src = selectedObject.userData.targetColorMesh || selectedObject;
-        let hex = 'ffffff';
-        if (src.isMesh && !Array.isArray(src.material)) hex = src.material.color.getHexString();
-        else src.traverse(c => { if (c.isMesh && !Array.isArray(c.material) && c.material.metalness < 0.5) hex = c.material.color.getHexString(); });
-        document.getElementById('color-input').value  = '#' + hex;
-        document.getElementById('color-hex').innerText = '#' + hex.toUpperCase();
-    } else if (['backdrop','rollup'].includes(type)) {
+    const groupActions = document.getElementById('control-group-actions');
+    const btnGroup = document.getElementById('btn-group-selected');
+    const btnUngroup = document.getElementById('btn-ungroup-selected');
+
+    if (selectedObjects.length > 1) {
+        document.getElementById('selected-title').innerText = `เลือกวัตถุ ${selectedObjects.length} ชิ้น`;
+        document.getElementById('selected-badge').innerText = "BATCH";
         colorCtrl.classList.add('hidden');
-        textureCtrl.classList.remove('hidden');
+        textureCtrl.classList.add('hidden');
+        if (groupActions) {
+            groupActions.classList.remove('hidden');
+            if (btnGroup) btnGroup.classList.remove('hidden');
+            if (btnUngroup) btnUngroup.classList.add('hidden');
+        }
     } else {
-        colorCtrl.classList.add('hidden');
-        textureCtrl.classList.add('hidden');
+        const type = selectedObjects[0].userData.type;
+        document.getElementById('selected-title').innerText = selectedObjects[0].name;
+        document.getElementById('selected-badge').innerText = type.toUpperCase();
+        
+        if (type === 'group') {
+            colorCtrl.classList.add('hidden');
+            textureCtrl.classList.add('hidden');
+            if (groupActions) {
+                groupActions.classList.remove('hidden');
+                if (btnGroup) btnGroup.classList.add('hidden');
+                if (btnUngroup) btnUngroup.classList.remove('hidden');
+            }
+        } else {
+            if (groupActions) groupActions.classList.add('hidden');
+            if (['table','bookshelf','cashier'].includes(type)) {
+                colorCtrl.classList.remove('hidden');
+                textureCtrl.classList.add('hidden');
+                const src = selectedObjects[0].userData.targetColorMesh || selectedObjects[0];
+                let hex = 'ffffff';
+                if (src.isMesh && !Array.isArray(src.material)) hex = src.material.color.getHexString();
+                else src.traverse(c => { if (c.isMesh && !Array.isArray(c.material) && c.material.metalness < 0.5) hex = c.material.color.getHexString(); });
+                document.getElementById('color-input').value  = '#' + hex;
+                document.getElementById('color-hex').innerText = '#' + hex.toUpperCase();
+            } else if (['backdrop','rollup'].includes(type)) {
+                colorCtrl.classList.add('hidden');
+                textureCtrl.classList.remove('hidden');
+            } else {
+                colorCtrl.classList.add('hidden');
+                textureCtrl.classList.add('hidden');
+            }
+        }
     }
     syncTransformPanel();
 }
@@ -1502,6 +1913,434 @@ function loadGLTFObject(file) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// INTERACTIVE PROPOSAL MODE & 3D COMMENT PINS
+// ══════════════════════════════════════════════════════════════════════════
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
+}
+
+function toggleProposalMode() {
+    proposalModeActive = !proposalModeActive;
+    
+    const mainUI = document.getElementById('main-ui');
+    const propOverlay = document.getElementById('proposal-overlay');
+    const pinsOverlay = document.getElementById('pins-overlay');
+    
+    if (proposalModeActive) {
+        // Clear selection to keep view clean
+        deselectObject();
+        deselectLight();
+        
+        if (transformControls) {
+            transformControls.detach();
+            transformControls.visible = false;
+        }
+        
+        // Hide edit tools panel
+        const leftPanel = document.getElementById('left-floating-panel');
+        if (leftPanel) leftPanel.classList.add('hidden');
+        if (activeLeftPanel) {
+            const btn = document.getElementById(`tab-btn-${activeLeftPanel}`);
+            if (btn) btn.classList.remove('active');
+            activeLeftPanel = null;
+        }
+        
+        if (mainUI) mainUI.classList.add('hidden');
+        if (propOverlay) propOverlay.classList.remove('hidden');
+        if (pinsOverlay) pinsOverlay.style.pointerEvents = 'auto'; // allow clicking on pins
+        
+        document.body.classList.add('proposal-mode');
+        
+        // Fill dimensions
+        const dimSpan = document.getElementById('prop-dimensions');
+        if (dimSpan) dimSpan.innerText = `${spaceWidth} × ${spaceLength} ม.`;
+        
+        updateProposalInventory();
+        updateProposalCostEstimate();
+        updateProposalCommentsList();
+        renderCommentPins();
+    } else {
+        commentPinModeActive = false;
+        
+        // Turn off pin mode active styling
+        const btnPin = document.getElementById('prop-btn-pin');
+        const btnPinText = document.getElementById('prop-pin-btn-text');
+        if (btnPin) btnPin.classList.remove('active');
+        if (btnPinText) btnPinText.innerText = "ปักหมุด (Pin Comment)";
+        
+        if (mainUI) mainUI.classList.remove('hidden');
+        if (propOverlay) propOverlay.classList.add('hidden');
+        if (pinsOverlay) {
+            pinsOverlay.style.pointerEvents = 'none';
+            pinsOverlay.innerHTML = ''; // Hide all pins
+        }
+        
+        document.body.classList.remove('proposal-mode');
+        
+        // Clear active states of comment pins
+        commentPins.forEach(p => { p.isEditing = false; });
+        
+        // Refresh editor UI
+        updateUI();
+    }
+}
+
+function toggleCommentPinMode() {
+    if (!proposalModeActive) return;
+    commentPinModeActive = !commentPinModeActive;
+    
+    const btn = document.getElementById('prop-btn-pin');
+    const btnText = document.getElementById('prop-pin-btn-text');
+    
+    if (btn) {
+        if (commentPinModeActive) {
+            btn.classList.add('active');
+            if (btnText) btnText.innerText = "โหมดปักหมุด: เปิดอยู่";
+        } else {
+            btn.classList.remove('active');
+            if (btnText) btnText.innerText = "ปักหมุด (Pin Comment)";
+        }
+    }
+}
+
+function renderCommentPins() {
+    const container = document.getElementById('pins-overlay');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    if (!proposalModeActive) return;
+    
+    commentPins.forEach(pin => {
+        const pinEl = document.createElement('div');
+        pinEl.id = `pin-dom-${pin.id}`;
+        pinEl.className = 'comment-pin animate-bounce';
+        if (pin.isEditing) pinEl.classList.add('active');
+        
+        // Pin ID display
+        pinEl.innerText = pin.id;
+        
+        // Tooltip container
+        const tooltip = document.createElement('div');
+        tooltip.className = 'comment-tooltip';
+        tooltip.style.display = 'block'; // Ensure we control visibility directly
+        
+        if (pin.isEditing) {
+            tooltip.innerHTML = `
+                <div class="flex flex-col gap-1.5 pointer-events-auto">
+                    <div class="font-bold text-[10px] text-cyan-400 mb-0.5">เพิ่มคำเสนอแนะ (หมุด #${pin.id})</div>
+                    <textarea class="w-full bg-white/10 border border-white/20 rounded p-1.5 text-white text-[10px] resize-none outline-none focus:border-cyan-500/50" rows="2" placeholder="เขียนความเห็นของคุณ..." style="font-family: inherit; color: #fff;"></textarea>
+                    <div class="flex justify-end gap-1 mt-1">
+                        <button onclick="savePin(${pin.id}, this)" class="bg-cyan-500 hover:bg-cyan-600 text-white rounded px-2.5 py-1 text-[9px] font-medium transition-all">บันทึก</button>
+                        <button onclick="cancelPin(${pin.id})" class="bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded px-2.5 py-1 text-[9px] font-medium transition-all">ยกเลิก</button>
+                    </div>
+                </div>
+            `;
+            tooltip.addEventListener('pointerdown', e => e.stopPropagation());
+            tooltip.addEventListener('click', e => e.stopPropagation());
+        } else {
+            tooltip.innerHTML = `
+                <div class="space-y-1 pointer-events-auto select-text">
+                    <div class="font-bold text-cyan-400 text-[10px]">หมุดที่ #${pin.id}</div>
+                    <div class="text-white/90 text-xs leading-relaxed break-words max-h-32 overflow-y-auto">${escapeHTML(pin.text)}</div>
+                    <div class="flex justify-between items-center mt-2 pt-1 border-t border-white/5">
+                        <button onclick="focusCameraOnPin(${pin.id})" class="text-cyan-400 hover:underline text-[9px]">ดูตำแหน่ง</button>
+                        <button onclick="deletePin(${pin.id})" class="text-red-400 hover:text-red-300 hover:underline text-[9px]">ลบออก</button>
+                    </div>
+                </div>
+            `;
+            tooltip.addEventListener('pointerdown', e => e.stopPropagation());
+            tooltip.addEventListener('click', e => e.stopPropagation());
+        }
+        
+        pinEl.appendChild(tooltip);
+        
+        pinEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            focusCameraOnPin(pin.id);
+        });
+        
+        container.appendChild(pinEl);
+    });
+}
+
+function savePin(id, btn) {
+    const pin = commentPins.find(p => p.id === id);
+    if (!pin) return;
+    
+    const textarea = btn.closest('.comment-tooltip').querySelector('textarea');
+    const text = textarea.value.trim();
+    
+    if (!text) {
+        alert("กรุณากรอกข้อความความคิดเห็น");
+        return;
+    }
+    
+    pin.text = text;
+    pin.isEditing = false;
+    
+    renderCommentPins();
+    updateProposalCommentsList();
+}
+
+function cancelPin(id) {
+    const idx = commentPins.findIndex(p => p.id === id);
+    if (idx > -1) {
+        commentPins.splice(idx, 1);
+    }
+    renderCommentPins();
+    updateProposalCommentsList();
+}
+
+function deletePin(id) {
+    const idx = commentPins.findIndex(p => p.id === id);
+    if (idx > -1) {
+        commentPins.splice(idx, 1);
+    }
+    renderCommentPins();
+    updateProposalCommentsList();
+}
+
+function focusCameraOnPin(id) {
+    const pin = commentPins.find(p => p.id === id);
+    if (!pin) return;
+    
+    // Highlight pin DOM element as active
+    document.querySelectorAll('.comment-pin').forEach(el => {
+        el.classList.remove('active');
+    });
+    
+    const activeEl = document.getElementById(`pin-dom-${pin.id}`);
+    if (activeEl) {
+        activeEl.classList.add('active');
+    }
+    
+    // Smooth transition
+    if (controls && camera) {
+        const targetPos = pin.position.clone();
+        const duration = 800;
+        const startTarget = controls.target.clone();
+        const startCam = camera.position.clone();
+        
+        // Set camera offset looking down slightly
+        const endCam = targetPos.clone().add(new THREE.Vector3(5, 5, 5));
+        const startTime = performance.now();
+        
+        function smoothZoom(now) {
+            const progress = Math.min((now - startTime) / duration, 1);
+            const ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+            
+            controls.target.lerpVectors(startTarget, targetPos, ease);
+            camera.position.lerpVectors(startCam, endCam, ease);
+            controls.update();
+            
+            if (progress < 1) {
+                requestAnimationFrame(smoothZoom);
+            }
+        }
+        
+        requestAnimationFrame(smoothZoom);
+    }
+}
+
+function updateProposalInventory() {
+    const list = document.getElementById('prop-assets-list');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    const counts = {};
+    const typeNames = {
+        backdrop: 'แบคดรอปผนัง (Backdrop)',
+        table: 'โต๊ะโชว์สินค้า (Table)',
+        bookshelf: 'ชั้นวางของ (Bookshelf)',
+        cashier: 'เคาน์เตอร์แคชเชียร์ (Cashier)',
+        rollup: 'ป้ายโรลอัปแบนเนอร์ (Rollup)',
+        group: 'กลุ่มวัตถุ (Group)',
+        custom: 'โมเดล 3D พิเศษ (GLTF)'
+    };
+    
+    // Scan draggableObjects and populate counts recursively
+    function scan(obj) {
+        if (obj.userData?.type && obj.userData.type !== 'group') {
+            const t = obj.userData.type;
+            const name = typeNames[t] || obj.name || 'วัตถุอื่น ๆ';
+            counts[name] = (counts[name] || 0) + 1;
+        } else if (obj.userData?.type === 'group' && obj.userData.children) {
+            obj.userData.children.forEach(c => scan(c));
+        } else if (obj.isGroup || obj.type === 'Group') {
+            obj.children.forEach(c => scan(c));
+        }
+    }
+    
+    draggableObjects.forEach(o => scan(o));
+    
+    const items = Object.entries(counts);
+    if (items.length === 0) {
+        list.innerHTML = `<div class="text-white/30 text-center py-2">ไม่มีวัตถุในห้องจัดแสดง</div>`;
+        return;
+    }
+    
+    items.forEach(([name, count]) => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 border-b border-white/5 last:border-b-0';
+        row.innerHTML = `
+            <span class="text-white/80 truncate pr-2">${name}</span>
+            <span class="font-bold text-cyan-400">x${count}</span>
+        `;
+        list.appendChild(row);
+    });
+}
+
+function updateProposalCostEstimate() {
+    const list = document.getElementById('prop-cost-estimate');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    let totalCost = 0;
+    const lines = [];
+    
+    // Carpet tiles
+    const carpetArea = spaceWidth * spaceLength;
+    const carpetPrice = carpetArea * 150;
+    totalCost += carpetPrice;
+    lines.push({
+        name: `ปูพื้นพรม (${carpetArea} ตร.ม.)`,
+        cost: carpetPrice
+    });
+    
+    // Objects prices
+    const prices = {
+        backdrop: 4500,
+        table: 1200,
+        bookshelf: 1800,
+        cashier: 2500,
+        rollup: 950,
+        custom: 3000
+    };
+    
+    const typeNames = {
+        backdrop: 'แบคดรอปผนัง',
+        table: 'โต๊ะโชว์สินค้า',
+        bookshelf: 'ชั้นวางของ',
+        cashier: 'เคาน์เตอร์แคชเชียร์',
+        rollup: 'ป้ายโรลอัป',
+        custom: 'วัตถุโครงสร้างพิเศษ'
+    };
+    
+    const counts = {};
+    function scan(obj) {
+        if (obj.userData?.type && obj.userData.type !== 'group') {
+            const t = obj.userData.type;
+            counts[t] = (counts[t] || 0) + 1;
+        } else if (obj.userData?.type === 'group' && obj.userData.children) {
+            obj.userData.children.forEach(c => scan(c));
+        } else if (obj.isGroup || obj.type === 'Group') {
+            obj.children.forEach(c => scan(c));
+        }
+    }
+    
+    draggableObjects.forEach(o => scan(o));
+    
+    Object.entries(counts).forEach(([type, count]) => {
+        const unitPrice = prices[type] || 1500;
+        const price = unitPrice * count;
+        totalCost += price;
+        lines.push({
+            name: `${typeNames[type] || 'วัตถุโครงสร้างเพิ่มเติม'} (x${count})`,
+            cost: price
+        });
+    });
+    
+    // Flat setup fee
+    const setupFee = 2000;
+    totalCost += setupFee;
+    lines.push({
+        name: 'ค่าติดตั้งและดำเนินการจัดแสดง',
+        cost: setupFee
+    });
+    
+    // Populate
+    lines.forEach(line => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center py-1 border-b border-white/5 last:border-b-0';
+        row.innerHTML = `
+            <span class="text-white/60 truncate pr-2">${line.name}</span>
+            <span class="text-white/80">฿${line.cost.toLocaleString()}</span>
+        `;
+        list.appendChild(row);
+    });
+    
+    // Total
+    const totalRow = document.createElement('div');
+    totalRow.className = 'flex justify-between items-center pt-2 mt-2 border-t border-cyan-500/30 text-xs font-bold';
+    totalRow.innerHTML = `
+        <span class="text-cyan-400">รวมประมาณการทั้งสิ้น</span>
+        <span class="text-cyan-300 font-mono">฿${totalCost.toLocaleString()}</span>
+    `;
+    list.appendChild(totalRow);
+}
+
+function updateProposalCommentsList() {
+    const list = document.getElementById('prop-comments-list');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    const savedPins = commentPins.filter(p => !p.isEditing);
+    
+    if (savedPins.length === 0) {
+        list.innerHTML = `
+            <div class="text-center py-6 text-white/20 text-[10px]">
+                <p>ยังไม่มีข้อเสนอแนะ</p>
+                <p class="mt-1">คลิกปุ่มปักหมุดด้านล่างเพื่อเพิ่ม</p>
+            </div>
+        `;
+        return;
+    }
+    
+    savedPins.forEach(pin => {
+        const item = document.createElement('div');
+        item.className = 'bg-white/5 border border-white/5 hover:border-cyan-500/20 hover:bg-white/10 rounded-xl p-3 cursor-pointer transition-all flex flex-col gap-1';
+        item.onclick = () => focusCameraOnPin(pin.id);
+        
+        item.innerHTML = `
+            <div class="flex justify-between items-center">
+                <span class="text-[10px] font-bold text-cyan-400 font-mono">หมุดที่ #${pin.id}</span>
+                <button onclick="event.stopPropagation(); deletePin(${pin.id})" class="text-red-400/70 hover:text-red-400 text-[9px] transition-colors">ลบ</button>
+            </div>
+            <p class="text-white/80 text-xs leading-normal break-words">${escapeHTML(pin.text)}</p>
+        `;
+        list.appendChild(item);
+    });
+}
+
+function updateCommentPinsProjection() {
+    if (!proposalModeActive) return;
+    
+    commentPins.forEach(pin => {
+        const pinDom = document.getElementById(`pin-dom-${pin.id}`);
+        if (!pinDom) return;
+        
+        const tempV = new THREE.Vector3().copy(pin.position);
+        tempV.project(camera);
+        
+        // Z is between -1 and 1 if within view frustum
+        if (tempV.z > 1) {
+            pinDom.style.display = 'none';
+        } else {
+            const x = (tempV.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (tempV.y * -0.5 + 0.5) * window.innerHeight;
+            pinDom.style.display = 'flex';
+            pinDom.style.left = `${x}px`;
+            pinDom.style.top = `${y}px`;
+        }
+    });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // RENDER LOOP
 // ══════════════════════════════════════════════════════════════════════════
 function animate() {
@@ -1509,6 +2348,8 @@ function animate() {
     if (selectedObject?.userData?.outlineHelper) selectedObject.userData.outlineHelper.update();
     // Update all light helpers
     sceneLights.forEach(e => { if (e.helper?.update) e.helper.update(); });
+    // Update comment pins projection in proposal mode
+    updateCommentPinsProjection();
     if (controls) controls.update();
     if (renderer) renderer.render(scene, camera);
 }
@@ -1555,3 +2396,13 @@ _g.loadGLTFObject      = loadGLTFObject;
 _g.paintAllTiles       = paintAllTiles;
 _g.setGizmoMode        = setGizmoMode;
 _g.toggleGuides        = toggleGuides;
+
+// Group & Proposal features
+_g.groupSelected       = groupSelected;
+_g.ungroupSelected     = ungroupSelected;
+_g.toggleProposalMode  = toggleProposalMode;
+_g.toggleCommentPinMode= toggleCommentPinMode;
+_g.savePin             = savePin;
+_g.cancelPin           = cancelPin;
+_g.deletePin           = deletePin;
+_g.focusCameraOnPin    = focusCameraOnPin;

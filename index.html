@@ -113,6 +113,62 @@
             border: 1px solid rgba(6, 182, 212, 0.2);
             color: rgb(8, 145, 178);
         }
+        
+        /* ── Comment Pin styles ────────────────────────────────────────── */
+        .comment-pin {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: rgba(6, 182, 212, 0.9);
+            border: 2px solid #fff;
+            color: #fff;
+            font-size: 11px;
+            font-weight: bold;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.6);
+            transition: transform 0.2s, background 0.2s;
+            pointer-events: auto;
+            transform: translate(-50%, -50%);
+        }
+        .comment-pin:hover {
+            transform: translate(-50%, -50%) scale(1.15);
+            background: rgba(6, 182, 212, 1);
+        }
+        .comment-pin.active {
+            background: #eab308;
+            box-shadow: 0 0 12px rgba(234, 179, 8, 0.8);
+            border-color: #fff;
+        }
+        
+        .comment-tooltip {
+            position: absolute;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            background: rgba(10, 11, 13, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 12px;
+            width: 200px;
+            font-size: 11px;
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            pointer-events: auto;
+            opacity: 0;
+            transition: all 0.2s;
+            transform-origin: bottom center;
+            display: none;
+            z-index: 100;
+        }
+        .comment-pin:hover .comment-tooltip, .comment-pin.active .comment-tooltip {
+            display: block;
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -246,6 +302,13 @@
                 <!-- Sun icon (light mode active) -->
                 <svg id="theme-icon-sun" class="w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z" />
+                </svg>
+            </button>
+
+            <!-- Proposal Mode Toggle -->
+            <button id="btn-proposal-mode" onclick="toggleProposalMode()" class="toolbar-btn text-white/50 hover:text-white" title="โหมดนำเสนอผลงาน (Proposal Mode)">
+                <svg class="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 17v-2a4 4 0 00-4-4H3m18 0h-2a4 4 0 00-4 4v2m-3-9V3M9 3h6m-3 8v4" />
                 </svg>
             </button>
         </div>
@@ -610,6 +673,22 @@
                     <p id="graphic-recommendation" class="text-[10px] text-cyan-400/80 font-medium text-center mt-1"></p>
                 </div>
 
+                <!-- Group / Ungroup buttons (Dynamic visibility in JS) -->
+                <div id="control-group-actions" class="hidden flex space-x-2 pt-1">
+                    <button id="btn-group-selected" onclick="groupSelected()" class="flex-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl py-2.5 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        <span>รวมกลุ่ม (Group)</span>
+                    </button>
+                    <button id="btn-ungroup-selected" onclick="ungroupSelected()" class="flex-1 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 rounded-xl py-2.5 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                        <span>แยกกลุ่ม (Ungroup)</span>
+                    </button>
+                </div>
+
                 <!-- Actions buttons inside properties -->
                 <div class="flex space-x-2 pt-2">
                     <button onclick="duplicateSelected()" class="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 rounded-xl py-2 text-[11px] font-semibold transition-all flex items-center justify-center space-x-1.5">
@@ -825,6 +904,83 @@
         </button>
     </div>
 </div>
+
+    <!-- ── PINS OVERLAY (3D Comment Pins Container) ──────────────────────── -->
+    <div id="pins-overlay" class="absolute inset-0 pointer-events-none z-20 overflow-hidden"></div>
+
+    <!-- ── PROPOSAL OVERLAY ────────────────────────────────────────────── -->
+    <div id="proposal-overlay" class="hidden absolute inset-0 pointer-events-none z-20 flex flex-col justify-between">
+        <!-- Top status bar -->
+        <header class="flex justify-between items-center p-4 pointer-events-auto">
+            <div class="floating-card bg-black/40 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl p-4 flex items-center space-x-3 pointer-events-auto">
+                <span class="text-cyan-400 font-bold text-sm tracking-wider">Ez3d Proposal</span>
+                <span class="text-white/30">|</span>
+                <span class="text-xs text-white/80" id="prop-dimensions">15 × 15 ม.</span>
+            </div>
+        </header>
+
+        <div class="flex-1 flex justify-between px-4 overflow-hidden">
+            <!-- Left Proposal Panel -->
+            <aside class="w-80 floating-card bg-black/45 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl flex flex-col overflow-hidden pointer-events-auto flex-shrink-0 mb-4">
+                <div class="p-4 border-b border-white/5 flex justify-between items-center">
+                    <h2 class="text-white font-bold text-xs tracking-wider">ข้อเสนอจัดแสดง & รีวิว</h2>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto p-4 space-y-4 select-text">
+                    <!-- Dynamic Asset Inventory Checklist -->
+                    <div class="space-y-1.5">
+                        <p class="section-label">รายการวัตถุในฉาก (Assets Inventory)</p>
+                        <div id="prop-assets-list" class="space-y-1 bg-white/5 rounded-xl p-3 border border-white/5 text-[11px] text-white/80 max-h-40 overflow-y-auto font-mono">
+                            <!-- Populated in JS -->
+                        </div>
+                    </div>
+
+                    <!-- Material / Cost Estimation Mockup -->
+                    <div class="space-y-1.5">
+                        <p class="section-label">ประมาณค่าวัสดุและอุปกรณ์จัดบูธ</p>
+                        <div id="prop-cost-estimate" class="space-y-1 bg-white/5 rounded-xl p-3 border border-white/5 text-[11px] text-white/80 max-h-40 overflow-y-auto font-mono">
+                            <!-- Populated in JS -->
+                        </div>
+                    </div>
+
+                    <!-- Comments List -->
+                    <div class="space-y-1.5 flex-1 flex flex-col overflow-hidden">
+                        <p class="section-label">รายการรีวิวและข้อเสนอแนะ</p>
+                        <div id="prop-comments-list" class="space-y-2 overflow-y-auto flex-1 max-h-64 pr-1">
+                            <!-- Populated in JS -->
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Bottom Controls -->
+        <footer class="p-6 flex justify-center items-center pointer-events-auto">
+            <div class="floating-card bg-black/40 backdrop-blur-md rounded-2xl p-2 shadow-2xl border border-white/5 flex gap-2 pointer-events-auto">
+                <button id="prop-btn-pin" onclick="toggleCommentPinMode()" class="gizmo-btn" title="ปักหมุดข้อเสนอแนะใหม่">
+                    <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span class="text-[10px] font-bold ml-1.5" id="prop-pin-btn-text">ปักหมุด (Pin Comment)</span>
+                </button>
+                
+                <button id="prop-btn-auto-rotate" onclick="toggleAutoRotate()" class="gizmo-btn" title="หมุนกล้องพรีเซนต์อัตโนมัติ">
+                    <svg class="w-4 h-4 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89" />
+                    </svg>
+                    <span class="text-[10px] font-bold ml-1.5">หมุนอัตโนมัติ</span>
+                </button>
+
+                <button onclick="toggleProposalMode()" class="gizmo-btn bg-red-500/10 hover:bg-red-500/20 border-red-500/20 text-red-400" title="ออกจากการนำเสนอ">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span class="text-[10px] font-bold ml-1.5">ออก (Exit)</span>
+                </button>
+            </div>
+        </footer>
+    </div>
 
 <!-- ── Tailwind reusable asset styles ────────────────── -->
 <style>
