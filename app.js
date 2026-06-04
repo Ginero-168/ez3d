@@ -13,6 +13,7 @@ let proposalModeActive = false;
 let commentPinModeActive = false;
 let commentPins = [];
 let _pinId = 0;
+let cameraTweenId = null;
 let selectedLight = null;
 let isDragging = false;
 let plane;
@@ -2119,6 +2120,12 @@ function focusCameraOnPin(id) {
         activeEl.classList.add('active');
     }
     
+    // Cancel previous tween if any to prevent race conditions
+    if (cameraTweenId) {
+        cancelAnimationFrame(cameraTweenId);
+        cameraTweenId = null;
+    }
+    
     // Smooth transition
     if (controls && camera) {
         const targetPos = pin.position.clone();
@@ -2139,11 +2146,13 @@ function focusCameraOnPin(id) {
             controls.update();
             
             if (progress < 1) {
-                requestAnimationFrame(smoothZoom);
+                cameraTweenId = requestAnimationFrame(smoothZoom);
+            } else {
+                cameraTweenId = null;
             }
         }
         
-        requestAnimationFrame(smoothZoom);
+        cameraTweenId = requestAnimationFrame(smoothZoom);
     }
 }
 
