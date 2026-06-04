@@ -9,7 +9,7 @@ import './styles.css';
 // ═══════════════════════════════════════════════════════════════════════
 
 // ─── Core Variables ──────────────────────────────────────────────────────
-let scene, camera, renderer, controls, transformControls, gridHelper;
+let scene, camera, renderer, controls, transformControls, gridHelper, boundsLine;
 let draggableObjects = [];
 let floorTiles = [];
 let floorTilesMesh = null;
@@ -354,9 +354,9 @@ function init3D(W, L) {
 
     // Bounds
     const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(W, 0.04, L));
-    const line  = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x06b6d4 }));
-    line.position.set(0, -0.01, 0);
-    scene.add(line);
+    boundsLine  = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x06b6d4 }));
+    boundsLine.position.set(0, -0.01, 0);
+    scene.add(boundsLine);
 
     // Initialize TransformControls
     transformControls = new TransformControls(camera, renderer.domElement);
@@ -1228,10 +1228,12 @@ function deleteSelectedItem() {
 }
 
 function clearAllWorkspace() {
-    deselectObject(); deselectLight();
-    [...draggableObjects].forEach(obj => _removeFromScene(obj));
-    draggableObjects = [];
+    _clearSceneContent();
+    floorTiles.forEach(tile => _setTileColor(tile.idx, '#27272a'));
+    if (floorTilesMesh?.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
+    renderCommentPins();
     updateLayerList();
+    updateUI();
     _undoStack = []; _redoStack = [];
     _refreshUndoRedo();
 }
@@ -1316,8 +1318,9 @@ function _buildLightEntry(type, props) {
         }
     }
 
-    const name = props.name || `${type[0].toUpperCase() + type.slice(1)} Light #${++_lightId}`;
-    return { id: _lightId, type, name, light, helper: null, marker: null };
+    const id = ++_lightId;
+    const name = props.name || `${type[0].toUpperCase() + type.slice(1)} Light #${id}`;
+    return { id, type, name, light, helper: null, marker: null };
 }
 
 function _attachLightToScene(entry) {
@@ -2041,6 +2044,228 @@ function captureMockup() {
     Object.assign(document.createElement('a'), { download: `Ez3d-${spaceWidth}x${spaceLength}m.png`, href: url }).click();
 }
 
+function _serializeVec3(v) {
+    return [v.x, v.y, v.z];
+}
+
+function _serializeEuler(e) {
+    return [e.x, e.y, e.z, e.order];
+}
+
+function _applySerializedTransform(obj, data) {
+    if (data.position) obj.position.fromArray(data.position);
+    if (data.rotation) obj.rotation.set(data.rotation[0] || 0, data.rotation[1] || 0, data.rotation[2] || 0, data.rotation[3] || 'XYZ');
+    if (data.scale) obj.scale.fromArray(data.scale);
+}
+
+function _getObjectColor(obj) {
+    const target = obj.userData.targetColorMesh || obj;
+    if (target.isMesh && !Array.isArray(target.material) && target.material?.color) {
+        return '#' + target.material.color.getHexString();
+    }
+    let hex = null;
+    target.traverse?.(c => {
+        if (!hex && c.isMesh && !Array.isArray(c.material) && c.material?.color) {
+            hex = '#' + c.material.color.getHexString();
+        }
+    });
+    return hex;
+}
+
+function _setObjectColor(obj, hex) {
+    if (!hex) return;
+    const target = obj.userData.targetColorMesh || obj;
+    if (target.isMesh && !Array.isArray(target.material) && target.material?.color) {
+        target.material.color.set(hex);
+        return;
+    }
+    target.traverse?.(c => {
+        if (c.isMesh && !Array.isArray(c.material) && c.material?.color && c.material.metalness < 0.5) {
+            c.material.color.set(hex);
+        }
+    });
+}
+
+function _serializeObject(obj) {
+    const type = obj.userData?.type;
+    if (!['backdrop', 'table', 'bookshelf', 'cashier', 'rollup'].includes(type)) return null;
+    return {
+        type,
+        name: obj.name,
+        position: _serializeVec3(obj.position),
+        rotation: _serializeEuler(obj.rotation),
+        scale: _serializeVec3(obj.scale),
+        color: _getObjectColor(obj),
+    };
+}
+
+function _serializeLight(entry) {
+    return {
+        type: entry.type,
+        name: entry.name,
+        props: _getLightProps(entry),
+    };
+}
+
+function _serializePin(pin) {
+    return {
+        id: pin.id,
+        position: _serializeVec3(pin.position),
+        text: pin.text || '',
+    };
+}
+
+function createProjectSnapshot() {
+    return {
+        schema: 'ez3d.project',
+        version: 1,
+        savedAt: new Date().toISOString(),
+        space: { width: spaceWidth, length: spaceLength },
+        settings: {
+            gridSnapEnabled,
+            gridSnapSize,
+            guidesVisible,
+            isLightMode,
+        },
+        objects: draggableObjects.map(_serializeObject).filter(Boolean),
+        lights: sceneLights.map(_serializeLight),
+        carpet: floorTiles.map(t => t.color),
+        comments: commentPins.filter(p => !p.isEditing).map(_serializePin),
+    };
+}
+
+function downloadProjectFile() {
+    const snapshot = createProjectSnapshot();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), {
+        download: `Ez3d-${spaceWidth}x${spaceLength}m.ez3d.json`,
+        href: url,
+    });
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function _rebuildSpaceGeometry(W, L) {
+    spaceWidth = Math.max(1, parseInt(W, 10) || 15);
+    spaceLength = Math.max(1, parseInt(L, 10) || 15);
+
+    if (gridHelper) {
+        scene.remove(gridHelper);
+        gridHelper.geometry?.dispose?.();
+        gridHelper.material?.dispose?.();
+    }
+    gridHelper = new THREE.GridHelper(150, 150, 0x1a2030, 0x0f1520);
+    gridHelper.position.x = (spaceWidth % 2 !== 0) ? 0.5 : 0.0;
+    gridHelper.position.y = -0.02;
+    gridHelper.position.z = (spaceLength % 2 !== 0) ? 0.5 : 0.0;
+    gridHelper.visible = guidesVisible;
+    scene.add(gridHelper);
+
+    generateCarpetTiles(spaceWidth, spaceLength);
+
+    if (boundsLine) {
+        scene.remove(boundsLine);
+        boundsLine.geometry?.dispose?.();
+        boundsLine.material?.dispose?.();
+    }
+    const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(spaceWidth, 0.04, spaceLength));
+    boundsLine = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x06b6d4 }));
+    boundsLine.position.set(0, -0.01, 0);
+    scene.add(boundsLine);
+
+    document.getElementById('ui-current-dimensions').innerText = `${spaceWidth} × ${spaceLength} ม.`;
+    document.getElementById('ui-tile-count').innerText = `${spaceWidth * spaceLength}`;
+}
+
+function _clearSceneContent() {
+    deselectObject();
+    deselectLight();
+    [...draggableObjects].forEach(obj => _removeFromScene(obj));
+    draggableObjects = [];
+    [...sceneLights].forEach(entry => deleteLightEntry(entry, true));
+    sceneLights = [];
+    lightMarkers = [];
+    commentPins = [];
+    _pinId = 0;
+}
+
+function loadProjectSnapshot(snapshot) {
+    if (!snapshot || snapshot.schema !== 'ez3d.project') {
+        alert('ไฟล์นี้ไม่ใช่ Ez3d project JSON ที่ถูกต้อง');
+        return;
+    }
+
+    const W = snapshot.space?.width || 15;
+    const L = snapshot.space?.length || 15;
+    if (!scene) {
+        document.getElementById('input-width').value = W;
+        document.getElementById('input-length').value = L;
+        submitDimensions();
+    }
+
+    _clearSceneContent();
+    _rebuildSpaceGeometry(W, L);
+
+    (snapshot.objects || []).forEach(item => {
+        const obj = spawnItem(item.type, false);
+        if (!obj) return;
+        obj.name = item.name || obj.name;
+        _applySerializedTransform(obj, item);
+        _setObjectColor(obj, item.color);
+    });
+
+    (snapshot.lights || []).forEach(item => {
+        const entry = _buildLightEntry(item.type, { ...(item.props || {}), name: item.name });
+        sceneLights.push(entry);
+        _attachLightToScene(entry);
+        _applyLightProps(entry, item.props || {});
+    });
+
+    (snapshot.carpet || []).forEach((color, idx) => {
+        if (idx < floorTiles.length) _setTileColor(idx, color);
+    });
+    if (floorTilesMesh?.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
+
+    commentPins = (snapshot.comments || []).map(pin => {
+        _pinId = Math.max(_pinId, pin.id || 0);
+        return {
+            id: pin.id,
+            position: new THREE.Vector3().fromArray(pin.position || [0, 0, 0]),
+            text: pin.text || '',
+            isEditing: false,
+        };
+    });
+
+    const settings = snapshot.settings || {};
+    gridSnapEnabled = settings.gridSnapEnabled ?? gridSnapEnabled;
+    gridSnapSize = settings.gridSnapSize ?? gridSnapSize;
+    guidesVisible = settings.guidesVisible ?? guidesVisible;
+    if ((settings.isLightMode ?? false) !== isLightMode) toggleLightMode();
+
+    _syncGridSnapButton();
+    updateLayerList();
+    updateUI();
+    renderCommentPins();
+    _undoStack = [];
+    _redoStack = [];
+    _refreshUndoRedo();
+}
+
+function loadProjectFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            loadProjectSnapshot(JSON.parse(reader.result));
+        } catch (err) {
+            console.error('Error loading project file:', err);
+            alert('โหลดไฟล์โปรเจกต์ไม่สำเร็จ กรุณาตรวจสอบไฟล์ JSON');
+        }
+    };
+    reader.readAsText(file);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // CUSTOM GLTF MODEL LOADER
 // ══════════════════════════════════════════════════════════════════════════
@@ -2589,6 +2814,10 @@ _g.changeSelectedColor = changeSelectedColor;
 _g.uploadTexture       = uploadTexture;
 _g.setCameraAngle      = setCameraAngle;
 _g.captureMockup       = captureMockup;
+_g.createProjectSnapshot = createProjectSnapshot;
+_g.loadProjectSnapshot = loadProjectSnapshot;
+_g.downloadProjectFile = downloadProjectFile;
+_g.loadProjectFile     = loadProjectFile;
 _g.duplicateSelected   = duplicateSelected;
 _g.toggleLightMode     = toggleLightMode;
 _g.toggleAutoRotate    = toggleAutoRotate;
