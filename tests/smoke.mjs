@@ -86,6 +86,21 @@ async function run() {
     const layerText = await page.locator('#layer-list').innerText();
     if (!layerText.includes('โต๊ะ #1')) throw new Error('Table was not added to layer list.');
 
+    const backdropName = await page.evaluate(() => {
+      const state = window.__ez3dDebug.getState();
+      return state.objects.find(obj => obj.type === 'backdrop')?.name || null;
+    });
+    if (!backdropName) throw new Error('Default backdrop was missing for texture upload test.');
+    await page.evaluate(name => {
+      if (!window.__ez3dDebug.selectByName(name)) throw new Error(`Could not select backdrop ${name}.`);
+    }, backdropName);
+    await page.locator('#image-file-input').setInputFiles({
+      name: 'texture.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'base64'),
+    });
+    await page.waitForFunction(() => window.__ez3dDebug.selectedHasTexture(), null, { timeout: 5000 });
+
     await page.keyboard.press('Escape');
     await page.mouse.click(720, 450);
     await page.waitForTimeout(100);

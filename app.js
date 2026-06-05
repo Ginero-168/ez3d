@@ -13,6 +13,7 @@ import { createProjectSnapshotFromState } from './src/projectSerialization.js';
 import { normalizeProjectSnapshot } from './src/projectSnapshot.js';
 import { applyAnchorDeltaToSelection, captureAnchorTransformStarts, getSelectionCenter } from './src/selectionTransforms.js';
 import { disposeObject3D } from './src/threeDisposal.js';
+import { applyTextureFileToObject } from './src/textureTools.js';
 import './styles.css';
 
 // Ez3d — Exhibition Space 3D Mockup Studio
@@ -2151,18 +2152,14 @@ function changeSelectedColor(hex) {
 // ══════════════════════════════════════════════════════════════════════════
 // TEXTURE
 // ══════════════════════════════════════════════════════════════════════════
-function uploadTexture(input) {
+async function uploadTexture(input) {
     if (!selectedObject || !input.files?.[0]) return;
-    const reader = new FileReader();
-    reader.onload = e => { const img = new Image(); img.src = e.target.result; img.onload = () => { const t = new THREE.Texture(img); t.needsUpdate = true; applyTextureToObject(selectedObject, t); }; };
-    reader.readAsDataURL(input.files[0]);
-}
-
-function applyTextureToObject(obj, texture) {
-    texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.minFilter = THREE.LinearFilter;
-    if (Array.isArray(obj.material)) { if (obj.material[4]) { obj.material[4].map = texture; obj.material[4].needsUpdate = true; } }
-    else if (obj.material) { obj.material.map = texture; obj.material.needsUpdate = true; }
+    try {
+        await applyTextureFileToObject(selectedObject, input.files[0]);
+    } catch (err) {
+        console.error('Texture upload failed:', err);
+        alert('ไม่สามารถโหลดไฟล์รูปภาพนี้ได้');
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3089,6 +3086,20 @@ function _installDebugHooks() {
             selectObject(targets[0]);
             targets.slice(1).forEach(obj => selectObject(obj, true));
             return targets.length === list.length;
+        },
+        selectedHasTexture() {
+            const target = selectedObject?.userData?.targetColorMesh || selectedObject;
+            if (!target) return false;
+            if (Array.isArray(target.material)) return target.material.some(mat => !!mat?.map);
+            if (target.material?.map) return true;
+            let found = false;
+            target.traverse?.(child => {
+                if (!found && child.isMesh) {
+                    if (Array.isArray(child.material)) found = child.material.some(mat => !!mat?.map);
+                    else found = !!child.material?.map;
+                }
+            });
+            return found;
         },
         flushAutosave() {
             _writeAutosaveNow();
