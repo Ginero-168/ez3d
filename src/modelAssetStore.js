@@ -52,6 +52,12 @@ export async function saveModelAsset(file, { id = createModelAssetId(), format }
   return record;
 }
 
+export async function saveModelAssetRecord(record) {
+  const file = recordToFile(record);
+  if (!file) return null;
+  return saveModelAsset(file, { id: record.id, format: record.format });
+}
+
 export function getModelAsset(id) {
   if (!id) return Promise.resolve(null);
   return withAssetStore('readonly', store => new Promise((resolve, reject) => {
@@ -64,6 +70,10 @@ export function getModelAsset(id) {
 export function deleteModelAsset(id) {
   if (!id) return Promise.resolve();
   return withAssetStore('readwrite', store => store.delete(id));
+}
+
+export function clearModelAssets() {
+  return withAssetStore('readwrite', store => store.clear());
 }
 
 export function recordToFile(record) {

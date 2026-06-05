@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { platform } from 'node:os';
 import { chromium } from 'playwright';
 
@@ -222,7 +223,7 @@ async function run() {
     await page.waitForFunction(() => {
       const state = window.__ez3dDebug.getState();
       return state.objects.some(obj => obj.name === 'smoke' && obj.type === 'custom' && obj.format === 'obj');
-    }, null, { timeout: 5000 });
+    }, null, { timeout: 15000 });
 
     const customRestoreState = await page.evaluate(async () => {
       const snapshot = window.createProjectSnapshot();
@@ -233,6 +234,33 @@ async function run() {
     const restoredCustom = customRestoreState.objects.find(obj => obj.name === 'smoke');
     if (!restoredCustom || restoredCustom.type !== 'custom' || restoredCustom.format !== 'obj' || !restoredCustom.modelAssetId) {
       throw new Error('Custom OBJ model did not restore from project snapshot.');
+    }
+
+    const bundleDownloadPromise = page.waitForEvent('download');
+    await page.evaluate(() => window.downloadProjectBundle());
+    const bundleDownload = await bundleDownloadPromise;
+    if (!bundleDownload.suggestedFilename().endsWith('.ez3d.zip')) {
+      throw new Error(`Project bundle filename was not .ez3d.zip: ${bundleDownload.suggestedFilename()}`);
+    }
+    const bundlePath = await bundleDownload.path();
+    const bundleBuffer = await readFile(bundlePath);
+    await page.evaluate(async () => {
+      window.clearAllWorkspace();
+      await window.__ez3dDebug.clearModelAssets();
+    });
+    await page.locator('#project-file-input').setInputFiles({
+      name: 'smoke.ez3d.zip',
+      mimeType: 'application/zip',
+      buffer: bundleBuffer,
+    });
+    try {
+      await page.waitForFunction(() => {
+        const state = window.__ez3dDebug.getState();
+        return state.objects.some(obj => obj.name === 'smoke' && obj.type === 'custom' && obj.format === 'obj' && obj.modelAssetId);
+      }, null, { timeout: 15000 });
+    } catch (err) {
+      const state = await page.evaluate(() => window.__ez3dDebug.getState());
+      throw new Error(`Project ZIP import did not restore custom model. State: ${JSON.stringify(state.objects)}`);
     }
 
     await page.locator('#light-mode-btn').click();

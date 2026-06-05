@@ -4,8 +4,9 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
-import { getModelAsset, recordToFile, saveModelAsset } from './src/modelAssetStore.js';
+import { clearModelAssets, getModelAsset, recordToFile, saveModelAsset } from './src/modelAssetStore.js';
 import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFile } from './src/modelLoaders.js';
+import { createProjectBundleBlob, loadProjectBundleFile } from './src/projectBundle.js';
 import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, isProjectSnapshot } from './src/projectSnapshot.js';
 import './styles.css';
 
@@ -2424,6 +2425,18 @@ function downloadProjectFile() {
     URL.revokeObjectURL(url);
 }
 
+async function downloadProjectBundle() {
+    const snapshot = createProjectSnapshot();
+    const blob = await createProjectBundleBlob(snapshot);
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), {
+        download: `Ez3d-${spaceWidth}x${spaceLength}m.ez3d.zip`,
+        href: url,
+    });
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 function _rebuildSpaceGeometry(W, L) {
     spaceWidth = Math.max(1, parseInt(W, 10) || 15);
     spaceLength = Math.max(1, parseInt(L, 10) || 15);
@@ -2560,6 +2573,15 @@ async function loadProjectSnapshot(snapshot, options = {}) {
 
 function loadProjectFile(file) {
     if (!file) return;
+    if (/\.zip$/i.test(file.name)) {
+        loadProjectBundleFile(file)
+            .then(snapshot => loadProjectSnapshot(snapshot))
+            .catch(err => {
+                console.error('Error loading project bundle:', err);
+                alert('โหลดไฟล์โปรเจกต์แบบ ZIP ไม่สำเร็จ กรุณาตรวจสอบไฟล์ .ez3d.zip');
+            });
+        return;
+    }
     const reader = new FileReader();
     reader.onload = async () => {
         try {
@@ -3205,6 +3227,7 @@ function _installDebugHooks() {
         readAutosave: _readAutosave,
         clearAutosave: clearAutosaveDraft,
         restoreAutosave: restoreAutosaveDraft,
+        clearModelAssets,
     };
 }
 
@@ -3247,6 +3270,7 @@ _g.loadProjectSnapshot = loadProjectSnapshot;
 _g.restoreAutosaveDraft = restoreAutosaveDraft;
 _g.clearAutosaveDraft = clearAutosaveDraft;
 _g.downloadProjectFile = downloadProjectFile;
+_g.downloadProjectBundle = downloadProjectBundle;
 _g.loadProjectFile     = loadProjectFile;
 _g.duplicateSelected   = duplicateSelected;
 _g.toggleLightMode     = toggleLightMode;
