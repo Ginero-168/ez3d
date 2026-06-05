@@ -8,7 +8,7 @@ import { appendLayerRowContent, escapeHTML, tableRowsHtml } from './src/domRende
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
 import { clearModelAssets, getModelAsset, recordToFiles, saveModelAsset } from './src/modelAssetStore.js';
 import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFiles } from './src/modelLoaders.js';
-import { createProjectBundleBlob, loadProjectBundleFile } from './src/projectBundle.js';
+import { downloadProjectJson, downloadProjectZip, readProjectFileSnapshot } from './src/projectIO.js';
 import { createProjectSnapshotFromState } from './src/projectSerialization.js';
 import { normalizeProjectSnapshot } from './src/projectSnapshot.js';
 import { disposeObject3D } from './src/threeDisposal.js';
@@ -2341,26 +2341,12 @@ function _maybePromptAutosaveRestore() {
 
 function downloadProjectFile() {
     const snapshot = createProjectSnapshot();
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement('a'), {
-        download: `Ez3d-${spaceWidth}x${spaceLength}m.ez3d.json`,
-        href: url,
-    });
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadProjectJson(snapshot, `Ez3d-${spaceWidth}x${spaceLength}m.ez3d.json`);
 }
 
 async function downloadProjectBundle() {
     const snapshot = createProjectSnapshot();
-    const blob = await createProjectBundleBlob(snapshot);
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement('a'), {
-        download: `Ez3d-${spaceWidth}x${spaceLength}m.ez3d.zip`,
-        href: url,
-    });
-    a.click();
-    URL.revokeObjectURL(url);
+    await downloadProjectZip(snapshot, `Ez3d-${spaceWidth}x${spaceLength}m.ez3d.zip`);
 }
 
 function _rebuildSpaceGeometry(W, L) {
@@ -2499,25 +2485,13 @@ async function loadProjectSnapshot(snapshot, options = {}) {
 
 function loadProjectFile(file) {
     if (!file) return;
-    if (/\.zip$/i.test(file.name)) {
-        loadProjectBundleFile(file)
-            .then(snapshot => loadProjectSnapshot(snapshot))
-            .catch(err => {
-                console.error('Error loading project bundle:', err);
-                alert('โหลดไฟล์โปรเจกต์แบบ ZIP ไม่สำเร็จ กรุณาตรวจสอบไฟล์ .ez3d.zip');
-            });
-        return;
-    }
-    const reader = new FileReader();
-    reader.onload = async () => {
-        try {
-            await loadProjectSnapshot(JSON.parse(reader.result));
-        } catch (err) {
+    readProjectFileSnapshot(file)
+        .then(snapshot => loadProjectSnapshot(snapshot))
+        .catch(err => {
             console.error('Error loading project file:', err);
-            alert('โหลดไฟล์โปรเจกต์ไม่สำเร็จ กรุณาตรวจสอบไฟล์ JSON');
-        }
-    };
-    reader.readAsText(file);
+            const type = /\.zip$/i.test(file.name) ? 'ZIP' : 'JSON';
+            alert(`โหลดไฟล์โปรเจกต์แบบ ${type} ไม่สำเร็จ กรุณาตรวจสอบไฟล์`);
+        });
 }
 
 // ══════════════════════════════════════════════════════════════════════════
