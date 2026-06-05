@@ -11,6 +11,7 @@ import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFiles } fro
 import { downloadProjectJson, downloadProjectZip, readProjectFileSnapshot } from './src/projectIO.js';
 import { createProjectSnapshotFromState } from './src/projectSerialization.js';
 import { normalizeProjectSnapshot } from './src/projectSnapshot.js';
+import { applyAnchorDeltaToSelection, captureAnchorTransformStarts, getSelectionCenter } from './src/selectionTransforms.js';
 import { disposeObject3D } from './src/threeDisposal.js';
 import './styles.css';
 
@@ -917,15 +918,7 @@ function _clearAllOutlines() {
 }
 
 function _getSelectionCenter(targets = selectedObjects) {
-    const box = new THREE.Box3();
-    targets.forEach(obj => {
-        obj.updateMatrixWorld(true);
-        box.expandByObject(obj);
-    });
-    const center = new THREE.Vector3();
-    if (box.isEmpty()) return center;
-    box.getCenter(center);
-    return center;
+    return getSelectionCenter(targets);
 }
 
 function _destroySelectionAnchor() {
@@ -969,37 +962,14 @@ function _syncSelectionAnchor() {
 }
 
 function _beginAnchorTransform() {
-    if (!selectionAnchor || selectedObjects.length === 0) return;
-    selectionAnchor.updateMatrixWorld(true);
-    _anchorStartMatrix = selectionAnchor.matrixWorld.clone();
-    _anchorTargetStarts = selectedObjects.map(obj => {
-        obj.updateMatrixWorld(true);
-        const parentInv = new THREE.Matrix4();
-        if (obj.parent) {
-            obj.parent.updateMatrixWorld(true);
-            parentInv.copy(obj.parent.matrixWorld).invert();
-        }
-        return {
-            obj,
-            matrixWorld: obj.matrixWorld.clone(),
-            parentInv,
-        };
-    });
+    const capture = captureAnchorTransformStarts(selectionAnchor, selectedObjects);
+    if (!capture) return;
+    _anchorStartMatrix = capture.anchorStartMatrix;
+    _anchorTargetStarts = capture.targetStarts;
 }
 
 function _applyAnchorDeltaToSelection() {
-    if (!selectionAnchor || !_anchorStartMatrix || !_anchorTargetStarts.length) return;
-    selectionAnchor.updateMatrixWorld(true);
-    const delta = new THREE.Matrix4().multiplyMatrices(
-        selectionAnchor.matrixWorld,
-        new THREE.Matrix4().copy(_anchorStartMatrix).invert()
-    );
-    _anchorTargetStarts.forEach(start => {
-        const nextWorld = new THREE.Matrix4().multiplyMatrices(delta, start.matrixWorld);
-        const nextLocal = new THREE.Matrix4().multiplyMatrices(start.parentInv, nextWorld);
-        nextLocal.decompose(start.obj.position, start.obj.quaternion, start.obj.scale);
-        if (start.obj.userData.outlineHelper) start.obj.userData.outlineHelper.update();
-    });
+    applyAnchorDeltaToSelection(selectionAnchor, _anchorStartMatrix, _anchorTargetStarts);
 }
 
 function _finishAnchorTransform() {
