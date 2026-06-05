@@ -7,7 +7,7 @@ import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
 import { clearModelAssets, getModelAsset, recordToFile, saveModelAsset } from './src/modelAssetStore.js';
 import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFile } from './src/modelLoaders.js';
 import { createProjectBundleBlob, loadProjectBundleFile } from './src/projectBundle.js';
-import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, isProjectSnapshot } from './src/projectSnapshot.js';
+import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, normalizeProjectSnapshot } from './src/projectSnapshot.js';
 import './styles.css';
 
 // Ez3d — Exhibition Space 3D Mockup Studio
@@ -239,6 +239,25 @@ function _setTileColor(idx, hexColor) {
     }
 }
 
+function _disposeMaterial(material) {
+    if (!material) return;
+    const materials = Array.isArray(material) ? material : [material];
+    materials.forEach(mat => {
+        Object.values(mat).forEach(value => {
+            if (value?.isTexture) value.dispose?.();
+        });
+        mat.dispose?.();
+    });
+}
+
+function _disposeObject3D(obj) {
+    if (!obj) return;
+    obj.traverse?.(child => {
+        child.geometry?.dispose?.();
+        _disposeMaterial(child.material);
+    });
+}
+
 // Command: Tile paint batch
 function _commitTileBatch() {
     if (!_tilePaintBatch.length) return;
@@ -266,14 +285,19 @@ function _addToScene(obj, idx) {
     scene.add(obj);
 }
 
-function _removeFromScene(obj) {
+function _removeFromScene(obj, { dispose = false } = {}) {
     const idx = draggableObjects.indexOf(obj);
     if (idx > -1) draggableObjects.splice(idx, 1);
-    if (obj.userData.outlineHelper) { scene.remove(obj.userData.outlineHelper); delete obj.userData.outlineHelper; }
+    if (obj.userData.outlineHelper) {
+        scene.remove(obj.userData.outlineHelper);
+        _disposeObject3D(obj.userData.outlineHelper);
+        delete obj.userData.outlineHelper;
+    }
     scene.remove(obj);
     if (selectedObject === obj) {
         deselectObject();
     }
+    if (dispose) _disposeObject3D(obj);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1593,17 +1617,25 @@ function deselectLight() {
     updateLayerList();
 }
 
-function deleteLightEntry(entry, noUndo = false) {
+function deleteLightEntry(entry, noUndo = false, { dispose = noUndo } = {}) {
     const idx = sceneLights.indexOf(entry);
     if (idx === -1) return;
     sceneLights.splice(idx, 1);
     scene.remove(entry.light);
     if (entry.light.target) scene.remove(entry.light.target);
-    if (entry.helper)  { scene.remove(entry.helper);  entry.helper.dispose(); }
+    if (entry.helper)  {
+        scene.remove(entry.helper);
+        if (dispose) entry.helper.dispose?.();
+    }
     if (entry.marker)  {
         const mi = lightMarkers.indexOf(entry.marker);
         if (mi > -1) lightMarkers.splice(mi, 1);
         scene.remove(entry.marker);
+        if (dispose) _disposeObject3D(entry.marker);
+    }
+    if (dispose) {
+        _disposeObject3D(entry.light);
+        _disposeObject3D(entry.light.target);
     }
     if (selectedLight === entry) { selectedLight = null; updateUI(); }
     updateLayerList();
@@ -1611,7 +1643,7 @@ function deleteLightEntry(entry, noUndo = false) {
     if (!noUndo) {
         _pushCmd({
             undo() { sceneLights.push(entry); _attachLightToScene(entry); updateLayerList(); },
-            redo() { deleteLightEntry(entry, true); updateLayerList(); }
+            redo() { deleteLightEntry(entry, true, { dispose: false }); updateLayerList(); }
         });
     }
 }
@@ -1978,6 +2010,26 @@ function applyRotation(deg){ setRotationY(deg); }
 // ══════════════════════════════════════════════════════════════════════════
 // LAYER LIST
 // ══════════════════════════════════════════════════════════════════════════
+function _trustedSvgFragment(svg) {
+    const template = document.createElement('template');
+    template.innerHTML = svg || '';
+    return template.content.cloneNode(true);
+}
+
+function _appendLayerRowContent(item, svgIcon, label, selected, selectedClass) {
+    item.appendChild(_trustedSvgFragment(svgIcon));
+    const nameEl = document.createElement('span');
+    nameEl.className = 'flex-1 truncate font-medium ml-1.5';
+    nameEl.textContent = label || 'Untitled';
+    item.appendChild(nameEl);
+    if (selected) {
+        const checkEl = document.createElement('span');
+        checkEl.className = `${selectedClass} text-[9px] flex-shrink-0`;
+        checkEl.textContent = '✓';
+        item.appendChild(checkEl);
+    }
+}
+
 function updateLayerList() {
     const c = document.getElementById('layer-list');
     if (!c) return;
@@ -2003,7 +2055,7 @@ function updateLayerList() {
                 (sel ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300' : 'bg-white/5 border-transparent hover:bg-white/10 text-white/75');
             item.onclick = () => { showLeftTab('layers'); selectObject(obj); };
             const svgIcon = OBJECT_LAYER_ICONS[obj.userData.type] || OBJECT_LAYER_ICONS.custom;
-            item.innerHTML = `${svgIcon}<span class="flex-1 truncate font-medium ml-1.5">${obj.name}</span>${sel?'<span class="text-cyan-400 text-[9px] flex-shrink-0">✓</span>':''}`;
+            _appendLayerRowContent(item, svgIcon, obj.name, sel, 'text-cyan-400');
             c.appendChild(item);
         });
     }
@@ -2022,7 +2074,7 @@ function updateLayerList() {
                 (sel ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300' : 'bg-white/5 border-transparent hover:bg-white/10 text-white/75');
             item.onclick = () => { showLeftTab('layers'); selectLight(entry); };
             const svgIcon = LIGHT_LAYER_ICONS[entry.type] || LIGHT_LAYER_ICONS.point;
-            item.innerHTML = `${svgIcon}<span class="flex-1 truncate font-medium ml-1.5">${entry.name}</span>${sel?'<span class="text-yellow-400 text-[9px] flex-shrink-0">✓</span>':''}`;
+            _appendLayerRowContent(item, svgIcon, entry.name, sel, 'text-yellow-400');
             c.appendChild(item);
         });
     }
@@ -2472,7 +2524,7 @@ function _rebuildSpaceGeometry(W, L) {
 function _clearSceneContent() {
     deselectObject();
     deselectLight();
-    [...draggableObjects].forEach(obj => _removeFromScene(obj));
+    [...draggableObjects].forEach(obj => _removeFromScene(obj, { dispose: true }));
     draggableObjects = [];
     [...sceneLights].forEach(entry => deleteLightEntry(entry, true));
     sceneLights = [];
@@ -2500,15 +2552,16 @@ async function _restoreSerializedCustomObject(item) {
 }
 
 async function loadProjectSnapshot(snapshot, options = {}) {
-    if (!isProjectSnapshot(snapshot)) {
+    const project = normalizeProjectSnapshot(snapshot);
+    if (!project) {
         alert('ไฟล์นี้ไม่ใช่ Ez3d project JSON ที่ถูกต้อง');
         return;
     }
 
     _suspendAutosave = true;
     try {
-        const W = snapshot.space?.width || 15;
-        const L = snapshot.space?.length || 15;
+        const W = project.space?.width || 15;
+        const L = project.space?.length || 15;
         if (!scene) {
             document.getElementById('input-width').value = W;
             document.getElementById('input-length').value = L;
@@ -2518,7 +2571,7 @@ async function loadProjectSnapshot(snapshot, options = {}) {
         _clearSceneContent();
         _rebuildSpaceGeometry(W, L);
 
-        for (const item of (snapshot.objects || [])) {
+        for (const item of (project.objects || [])) {
             if (item.type === 'custom') {
                 await _restoreSerializedCustomObject(item);
                 continue;
@@ -2530,19 +2583,19 @@ async function loadProjectSnapshot(snapshot, options = {}) {
             _setObjectColor(obj, item.color);
         }
 
-        (snapshot.lights || []).forEach(item => {
+        (project.lights || []).forEach(item => {
             const entry = _buildLightEntry(item.type, { ...(item.props || {}), name: item.name });
             sceneLights.push(entry);
             _attachLightToScene(entry);
             _applyLightProps(entry, item.props || {});
         });
 
-        (snapshot.carpet || []).forEach((color, idx) => {
+        (project.carpet || []).forEach((color, idx) => {
             if (idx < floorTiles.length) _setTileColor(idx, color);
         });
         if (floorTilesMesh?.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
 
-        commentPins = (snapshot.comments || []).map(pin => {
+        commentPins = (project.comments || []).map(pin => {
             _pinId = Math.max(_pinId, pin.id || 0);
             return {
                 id: pin.id,
@@ -2552,7 +2605,7 @@ async function loadProjectSnapshot(snapshot, options = {}) {
             };
         });
 
-        const settings = snapshot.settings || {};
+        const settings = project.settings || {};
         gridSnapEnabled = settings.gridSnapEnabled ?? gridSnapEnabled;
         gridSnapSize = settings.gridSnapSize ?? gridSnapSize;
         guidesVisible = settings.guidesVisible ?? guidesVisible;
@@ -2923,10 +2976,13 @@ function updateProposalInventory() {
     items.forEach(({ name, count }) => {
         const row = document.createElement('div');
         row.className = 'flex justify-between items-center py-1 border-b border-white/5 last:border-b-0';
-        row.innerHTML = `
-            <span class="text-white/80 truncate pr-2">${name}</span>
-            <span class="font-bold text-cyan-400">x${count}</span>
-        `;
+        const nameEl = document.createElement('span');
+        nameEl.className = 'text-white/80 truncate pr-2';
+        nameEl.textContent = name;
+        const countEl = document.createElement('span');
+        countEl.className = 'font-bold text-cyan-400';
+        countEl.textContent = `x${count}`;
+        row.append(nameEl, countEl);
         list.appendChild(row);
     });
 }
@@ -2969,19 +3025,25 @@ function updateProposalCostEstimate() {
     lines.forEach(line => {
         const row = document.createElement('div');
         row.className = 'flex justify-between items-center py-1 border-b border-white/5 last:border-b-0';
-        row.innerHTML = `
-            <span class="text-white/60 truncate pr-2">${line.name}</span>
-            <span class="text-white/80">฿${line.cost.toLocaleString()}</span>
-        `;
+        const nameEl = document.createElement('span');
+        nameEl.className = 'text-white/60 truncate pr-2';
+        nameEl.textContent = line.name;
+        const costEl = document.createElement('span');
+        costEl.className = 'text-white/80';
+        costEl.textContent = `฿${line.cost.toLocaleString()}`;
+        row.append(nameEl, costEl);
         list.appendChild(row);
     });
 
     const totalRow = document.createElement('div');
     totalRow.className = 'flex justify-between items-center pt-2 mt-2 border-t border-cyan-500/30 text-xs font-bold';
-    totalRow.innerHTML = `
-        <span class="text-cyan-400">รวมประมาณการทั้งสิ้น</span>
-        <span class="text-cyan-300 font-mono">฿${totalCost.toLocaleString()}</span>
-    `;
+    const totalLabel = document.createElement('span');
+    totalLabel.className = 'text-cyan-400';
+    totalLabel.textContent = 'รวมประมาณการทั้งสิ้น';
+    const totalValue = document.createElement('span');
+    totalValue.className = 'text-cyan-300 font-mono';
+    totalValue.textContent = `฿${totalCost.toLocaleString()}`;
+    totalRow.append(totalLabel, totalValue);
     list.appendChild(totalRow);
 }
 
@@ -3073,14 +3135,25 @@ function updateProposalCommentsList() {
         const item = document.createElement('div');
         item.className = 'bg-white/5 border border-white/5 hover:border-cyan-500/20 hover:bg-white/10 rounded-xl p-3 cursor-pointer transition-all flex flex-col gap-1';
         item.onclick = () => focusCameraOnPin(pin.id);
-        
-        item.innerHTML = `
-            <div class="flex justify-between items-center">
-                <span class="text-[10px] font-bold text-cyan-400 font-mono">หมุดที่ #${pin.id}</span>
-                <button onclick="event.stopPropagation(); deletePin(${pin.id})" class="text-red-400/70 hover:text-red-400 text-[9px] transition-colors">ลบ</button>
-            </div>
-            <p class="text-white/80 text-xs leading-normal break-words">${escapeHTML(pin.text)}</p>
-        `;
+
+        const header = document.createElement('div');
+        header.className = 'flex justify-between items-center';
+        const title = document.createElement('span');
+        title.className = 'text-[10px] font-bold text-cyan-400 font-mono';
+        title.textContent = `หมุดที่ #${pin.id}`;
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'text-red-400/70 hover:text-red-400 text-[9px] transition-colors';
+        deleteBtn.textContent = 'ลบ';
+        deleteBtn.addEventListener('click', event => {
+            event.stopPropagation();
+            deletePin(pin.id);
+        });
+        header.append(title, deleteBtn);
+
+        const body = document.createElement('p');
+        body.className = 'text-white/80 text-xs leading-normal break-words';
+        body.textContent = pin.text;
+        item.append(header, body);
         list.appendChild(item);
     });
 }

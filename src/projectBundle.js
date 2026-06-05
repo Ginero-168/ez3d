@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { getModelAsset, saveModelAssetRecord } from './modelAssetStore.js';
-import { isProjectSnapshot } from './projectSnapshot.js';
+import { isProjectSnapshot, normalizeProjectSnapshot } from './projectSnapshot.js';
 
 const PROJECT_FILE = 'project.json';
 const ASSET_MANIFEST_FILE = 'assets/manifest.json';
@@ -50,8 +50,8 @@ export async function loadProjectBundleFile(file) {
   const projectEntry = zip.file(PROJECT_FILE);
   if (!projectEntry) throw new Error('Missing project.json in Ez3d bundle.');
 
-  const snapshot = JSON.parse(await projectEntry.async('string'));
-  if (!isProjectSnapshot(snapshot)) throw new Error('Invalid Ez3d project snapshot.');
+  const snapshot = normalizeProjectSnapshot(JSON.parse(await projectEntry.async('string')));
+  if (!snapshot) throw new Error('Invalid Ez3d project snapshot.');
 
   const manifestEntry = zip.file(ASSET_MANIFEST_FILE);
   const manifest = manifestEntry ? JSON.parse(await manifestEntry.async('string')) : [];

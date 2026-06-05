@@ -1,4 +1,4 @@
-import { isProjectSnapshot } from './projectSnapshot.js';
+import { normalizeProjectSnapshot } from './projectSnapshot.js';
 
 export const AUTOSAVE_KEY = 'ez3d.autosave.v1';
 
@@ -7,7 +7,7 @@ export function readAutosaveDraft(storage = localStorage) {
     const raw = storage.getItem(AUTOSAVE_KEY);
     if (!raw) return null;
     const snapshot = JSON.parse(raw);
-    return isProjectSnapshot(snapshot) ? snapshot : null;
+    return normalizeProjectSnapshot(snapshot);
   } catch (err) {
     console.warn('Ez3d autosave read failed:', err);
     return null;

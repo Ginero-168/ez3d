@@ -311,6 +311,35 @@ async function run() {
       throw new Error(`Proposal export filename was not HTML: ${download.suggestedFilename()}`);
     }
 
+    const safeLayerRender = await page.evaluate(async () => {
+      await window.loadProjectSnapshot({
+        schema: 'ez3d.project',
+        version: 1,
+        space: { width: 3, length: 3 },
+        objects: [{
+          type: 'table',
+          name: '<img src=x onerror="window.__ez3dXss=1">',
+          position: [0, 0, 0],
+          rotation: [0, 0, 0, 'XYZ'],
+          scale: [1, 1, 1],
+          color: '#ffffff',
+        }],
+        lights: [],
+        carpet: [],
+        comments: [],
+        settings: {},
+      });
+      const layerList = document.getElementById('layer-list');
+      return {
+        text: layerList.innerText,
+        hasInjectedImage: !!layerList.querySelector('img'),
+        xssFlag: window.__ez3dXss === 1,
+      };
+    });
+    if (!safeLayerRender.text.includes('<img src=x') || safeLayerRender.hasInjectedImage || safeLayerRender.xssFlag) {
+      throw new Error(`Layer list rendered unsafe HTML: ${JSON.stringify(safeLayerRender)}`);
+    }
+
     if (errors.length) throw new Error(`Page errors:\n${errors.join('\n')}`);
   } finally {
     if (browser) await browser.close();
