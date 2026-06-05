@@ -671,10 +671,8 @@ function onPointerDown(event) {
     
     // Check if user clicked directly on a gizmo handle — let TransformControls handle it
     if (transformControls && transformControls.visible && selectedObject) {
-        const gizmoObjects = [];
-        transformControls.traverse(child => {
-            if (child.isMesh || child.isLine) gizmoObjects.push(child);
-        });
+        const activePicker = transformControls._gizmo?.picker?.[transformControls.mode];
+        const gizmoObjects = activePicker?.children || [];
         const gizmoHits = raycaster.intersectObjects(gizmoObjects, true);
         if (gizmoHits.length > 0) {
             return; // Let TransformControls handle its own gizmo click
@@ -2079,6 +2077,22 @@ function toggleLeftPanel(panelName) {
     }
 }
 
+function closeLeftPanel() {
+    const panelEl = document.getElementById('left-floating-panel');
+    const buttons = {
+        objects: document.getElementById('tab-btn-objects'),
+        lights: document.getElementById('tab-btn-lights'),
+        layers: document.getElementById('tab-btn-layers'),
+        paint: document.getElementById('tab-btn-paint')
+    };
+    if (activeLeftPanel && buttons[activeLeftPanel]) {
+        buttons[activeLeftPanel].classList.remove('active');
+    }
+    if (panelEl) panelEl.classList.add('hidden');
+    if (activeLeftPanel === 'paint') currentMode = 'objects';
+    activeLeftPanel = null;
+}
+
 function showLeftTab(tab) {
     const panelEl = document.getElementById('left-floating-panel');
     const titleEl = document.getElementById('left-panel-title');
@@ -2211,7 +2225,7 @@ function toggleLightMode() {
     isLightMode = !isLightMode;
     document.body.classList.toggle('light-mode', isLightMode);
     if (scene) {
-        const bg = isLightMode ? 0xf2ede4 : 0x0a0b0d;
+        const bg = isLightMode ? 0xe5e7eb : 0x0a0b0d;
         scene.background = new THREE.Color(bg);
         if (scene.fog) scene.fog.color.set(bg);
     }
@@ -3246,6 +3260,7 @@ _g.setLightAngle=setLightAngle; _g.setLightPenumbra=setLightPenumbra; _g.setLigh
 _g.setLightSkyColor=setLightSkyColor; _g.setLightGroundColor=setLightGroundColor;
 _g.renameLightEntry=renameLightEntry;
 _g.toggleLeftPanel     = toggleLeftPanel;
+_g.closeLeftPanel      = closeLeftPanel;
 _g.load3DObject        = load3DObject;
 _g.loadGLTFObject      = loadGLTFObject;
 _g.paintAllTiles       = paintAllTiles;

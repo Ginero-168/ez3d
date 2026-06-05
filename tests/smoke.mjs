@@ -66,6 +66,14 @@ async function run() {
     await page.waitForTimeout(1500);
 
     await page.locator('#tab-btn-objects').click();
+    if (!(await page.locator('#left-floating-panel').isVisible())) {
+      throw new Error('Objects panel did not open.');
+    }
+    await page.locator('#left-panel-close-btn').click();
+    if (await page.locator('#left-floating-panel').isVisible()) {
+      throw new Error('Left panel close button did not hide the panel.');
+    }
+    await page.locator('#tab-btn-objects').click();
     await page.evaluate(() => window.applyLayoutTemplate('booth3x3', true));
     await page.locator('#tab-btn-layers').click();
     const templateLayerText = await page.locator('#layer-list').innerText();
@@ -219,6 +227,19 @@ async function run() {
     const restoredCustom = customRestoreState.objects.find(obj => obj.name === 'smoke');
     if (!restoredCustom || restoredCustom.type !== 'custom' || restoredCustom.format !== 'obj' || !restoredCustom.modelAssetId) {
       throw new Error('Custom OBJ model did not restore from project snapshot.');
+    }
+
+    await page.locator('#light-mode-btn').click();
+    const lightModeColors = await page.evaluate(() => {
+      const bodyBg = getComputedStyle(document.body).backgroundColor;
+      const panelBg = getComputedStyle(document.getElementById('left-floating-panel')).backgroundColor;
+      return { bodyBg, panelBg };
+    });
+    if (lightModeColors.bodyBg !== 'rgb(229, 231, 235)') {
+      throw new Error(`Light mode body background should be neutral gray; got ${lightModeColors.bodyBg}.`);
+    }
+    if (lightModeColors.panelBg.includes('237') || lightModeColors.panelBg.includes('228')) {
+      throw new Error(`Light mode panel still appears cream: ${lightModeColors.panelBg}.`);
     }
 
     await page.locator('#snap-toggle-btn').click();
