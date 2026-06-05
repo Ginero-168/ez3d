@@ -236,6 +236,34 @@ async function run() {
       throw new Error('Custom OBJ model did not restore from project snapshot.');
     }
 
+    await page.locator('#model-file-input').setInputFiles([
+      {
+        name: 'multi.obj',
+        mimeType: 'text/plain',
+        buffer: Buffer.from([
+          'mtllib multi.mtl',
+          'o MultiMaterialTriangle',
+          'v 0 0 0',
+          'v 1 0 0',
+          'v 0 1 0',
+          'usemtl RedMat',
+          'f 1 2 3',
+        ].join('\n')),
+      },
+      {
+        name: 'multi.mtl',
+        mimeType: 'text/plain',
+        buffer: Buffer.from([
+          'newmtl RedMat',
+          'Kd 1.0 0.0 0.0',
+        ].join('\n')),
+      },
+    ]);
+    await page.waitForFunction(() => {
+      const state = window.__ez3dDebug.getState();
+      return state.objects.some(obj => obj.name === 'multi' && obj.type === 'custom' && obj.format === 'obj');
+    }, null, { timeout: 15000 });
+
     const bundleDownloadPromise = page.waitForEvent('download');
     await page.evaluate(() => window.downloadProjectBundle());
     const bundleDownload = await bundleDownloadPromise;
@@ -256,7 +284,8 @@ async function run() {
     try {
       await page.waitForFunction(() => {
         const state = window.__ez3dDebug.getState();
-        return state.objects.some(obj => obj.name === 'smoke' && obj.type === 'custom' && obj.format === 'obj' && obj.modelAssetId);
+        return state.objects.some(obj => obj.name === 'smoke' && obj.type === 'custom' && obj.format === 'obj' && obj.modelAssetId) &&
+          state.objects.some(obj => obj.name === 'multi' && obj.type === 'custom' && obj.format === 'obj' && obj.modelAssetId);
       }, null, { timeout: 15000 });
     } catch (err) {
       const state = await page.evaluate(() => window.__ez3dDebug.getState());

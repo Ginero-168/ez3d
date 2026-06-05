@@ -38,24 +38,47 @@ export function createModelAssetId() {
   return `asset-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export async function saveModelAsset(file, { id = createModelAssetId(), format } = {}) {
+function normalizeFiles(input) {
+  if (!input) return [];
+  if (input instanceof File) return [input];
+  return Array.from(input).filter(file => file instanceof File);
+}
+
+function filePath(file) {
+  return file.webkitRelativePath || file.name;
+}
+
+export async function saveModelAsset(input, { id = createModelAssetId(), format, mainFileName } = {}) {
+  const files = normalizeFiles(input);
+  const mainFile = files.find(file => file.name === mainFileName || filePath(file) === mainFileName) || files[0];
+  if (!mainFile) throw new Error('No model files to save.');
+
   const record = {
     id,
-    name: file.name,
-    type: file.type || 'application/octet-stream',
-    size: file.size,
+    name: mainFile.name,
+    type: mainFile.type || 'application/octet-stream',
+    size: files.reduce((total, file) => total + file.size, 0),
     format,
+    mainFileName: mainFile.name,
     savedAt: new Date().toISOString(),
-    blob: file,
+    blob: mainFile,
+    files: files.map(file => ({
+      name: file.name,
+      path: filePath(file),
+      type: file.type || 'application/octet-stream',
+      size: file.size,
+      blob: file,
+      isMain: file === mainFile,
+    })),
   };
   await withAssetStore('readwrite', store => store.put(record));
   return record;
 }
 
 export async function saveModelAssetRecord(record) {
-  const file = recordToFile(record);
-  if (!file) return null;
-  return saveModelAsset(file, { id: record.id, format: record.format });
+  const files = recordToFiles(record);
+  if (!files.length) return null;
+  return saveModelAsset(files, { id: record.id, format: record.format, mainFileName: record.mainFileName || record.name });
 }
 
 export function getModelAsset(id) {
@@ -79,4 +102,14 @@ export function clearModelAssets() {
 export function recordToFile(record) {
   if (!record?.blob) return null;
   return new File([record.blob], record.name, { type: record.type || 'application/octet-stream' });
+}
+
+export function recordToFiles(record) {
+  if (Array.isArray(record?.files) && record.files.length) {
+    return record.files
+      .filter(file => file?.blob)
+      .map(file => new File([file.blob], file.path || file.name, { type: file.type || 'application/octet-stream' }));
+  }
+  const file = recordToFile(record);
+  return file ? [file] : [];
 }

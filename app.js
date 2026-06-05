@@ -4,8 +4,8 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
-import { clearModelAssets, getModelAsset, recordToFile, saveModelAsset } from './src/modelAssetStore.js';
-import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFile } from './src/modelLoaders.js';
+import { clearModelAssets, getModelAsset, recordToFiles, saveModelAsset } from './src/modelAssetStore.js';
+import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFiles } from './src/modelLoaders.js';
 import { createProjectBundleBlob, loadProjectBundleFile } from './src/projectBundle.js';
 import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, normalizeProjectSnapshot } from './src/projectSnapshot.js';
 import './styles.css';
@@ -2535,13 +2535,14 @@ function _clearSceneContent() {
 
 async function _restoreSerializedCustomObject(item) {
     const record = await getModelAsset(item.modelAssetId);
-    const file = recordToFile(record);
-    if (!file) {
+    const files = recordToFiles(record);
+    if (!files.length) {
         console.warn('Missing custom model asset for project object:', item.modelAssetId);
         return null;
     }
-    const { object: model, format } = await loadModelFromFile(file);
-    const wrapper = _prepareCustomModel(model, file, format || item.format);
+    const mainFile = files.find(file => file.name === (record.mainFileName || record.name)) || files[0];
+    const { object: model, format } = await loadModelFromFiles(files);
+    const wrapper = _prepareCustomModel(model, mainFile, format || item.format);
     wrapper.name = item.name || wrapper.name;
     wrapper.userData.modelAssetId = item.modelAssetId;
     wrapper.userData.modelFileName = item.modelFileName || record.name;
@@ -2683,9 +2684,11 @@ function _prepareCustomModel(model, file, format) {
     return wrapper;
 }
 
-async function load3DObject(file) {
-    if (!file) return;
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+async function load3DObject(input) {
+    const files = Array.from(input instanceof File ? [input] : (input || [])).filter(file => file instanceof File);
+    if (!files.length) return;
+    const mainFile = files.find(file => SUPPORTED_MODEL_EXTENSIONS.includes(file.name.split('.').pop()?.toLowerCase() || '')) || files[0];
+    const ext = mainFile.name.split('.').pop()?.toLowerCase() || '';
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.classList.remove('hidden');
 
@@ -2694,9 +2697,9 @@ async function load3DObject(file) {
             throw new Error(`Unsupported 3D format: .${ext || 'unknown'}`);
         }
 
-        const { object: model, format } = await loadModelFromFile(file);
-        const asset = await saveModelAsset(file, { format });
-        const wrapper = _prepareCustomModel(model, file, format);
+        const { object: model, format } = await loadModelFromFiles(files);
+        const asset = await saveModelAsset(files, { format, mainFileName: mainFile.name });
+        const wrapper = _prepareCustomModel(model, mainFile, format);
         wrapper.userData.modelAssetId = asset.id;
         wrapper.userData.modelFileName = asset.name;
         wrapper.position.set(0, 0, 0);

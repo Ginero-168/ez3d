@@ -452,9 +452,9 @@
                         </div>
                         <div class="ml-2.5 min-w-0 text-left">
                             <span class="text-emerald-400 font-semibold block text-xs">อัปโหลดไฟล์ 3D</span>
-                            <span class="text-[10px] text-emerald-400/50">GLB, GLTF, FBX, OBJ, STL, PLY, DAE</span>
+                            <span class="text-[10px] text-emerald-400/50">GLB/GLTF, FBX, OBJ+MTL, STL, PLY, DAE</span>
                         </div>
-                        <input type="file" id="model-file-input" class="hidden" accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.dae" onchange="load3DObject(this.files[0]); this.value = '';">
+                        <input type="file" id="model-file-input" class="hidden" multiple accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.dae,.bin,.mtl,.jpg,.jpeg,.png,.webp,.ktx2,.tga,.bmp" onchange="load3DObject(this.files); this.value = '';">
                     </button>
                 </div>
             </div>

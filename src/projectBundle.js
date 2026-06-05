@@ -9,6 +9,23 @@ function safeAssetName(name) {
   return (name || 'model.bin').replace(/[^a-zA-Z0-9._-]+/g, '_');
 }
 
+function assetFiles(record) {
+  if (Array.isArray(record?.files) && record.files.length) {
+    return record.files.filter(file => file?.blob);
+  }
+  if (record?.blob) {
+    return [{
+      name: record.name,
+      path: record.name,
+      type: record.type,
+      size: record.size,
+      blob: record.blob,
+      isMain: true,
+    }];
+  }
+  return [];
+}
+
 function customAssetIds(snapshot) {
   return [...new Set(
     (snapshot.objects || [])
@@ -27,18 +44,31 @@ export async function createProjectBundleBlob(snapshot) {
 
   for (const id of customAssetIds(snapshot)) {
     const record = await getModelAsset(id);
-    if (!record?.blob) continue;
-    const path = `assets/${id}/${safeAssetName(record.name)}`;
+    const files = assetFiles(record);
+    if (!files.length) continue;
+    const manifestFiles = [];
+    files.forEach((file, index) => {
+      const path = `assets/${id}/${index}-${safeAssetName(file.path || file.name)}`;
+      manifestFiles.push({
+        path,
+        name: file.name,
+        relativePath: file.path || file.name,
+        type: file.type,
+        size: file.size,
+        isMain: file.isMain || file.name === record.mainFileName || file.name === record.name,
+      });
+      zip.file(path, file.blob);
+    });
     manifest.push({
       id,
-      path,
       name: record.name,
       type: record.type,
       size: record.size,
       format: record.format,
+      mainFileName: record.mainFileName || record.name,
       savedAt: record.savedAt,
+      files: manifestFiles,
     });
-    zip.file(path, record.blob);
   }
 
   zip.file(ASSET_MANIFEST_FILE, JSON.stringify(manifest, null, 2));
@@ -57,17 +87,33 @@ export async function loadProjectBundleFile(file) {
   const manifest = manifestEntry ? JSON.parse(await manifestEntry.async('string')) : [];
 
   for (const asset of manifest) {
-    const assetEntry = zip.file(asset.path);
-    if (!assetEntry) continue;
-    const blob = await assetEntry.async('blob');
+    const files = [];
+    const manifestFiles = Array.isArray(asset.files) && asset.files.length
+      ? asset.files
+      : [{ path: asset.path, name: asset.name, relativePath: asset.name, type: asset.type, size: asset.size, isMain: true }];
+    for (const file of manifestFiles) {
+      const assetEntry = zip.file(file.path);
+      if (!assetEntry) continue;
+      files.push({
+        name: file.name,
+        path: file.relativePath || file.name,
+        type: file.type,
+        size: file.size,
+        isMain: file.isMain,
+        blob: await assetEntry.async('blob'),
+      });
+    }
+    if (!files.length) continue;
     await saveModelAssetRecord({
       id: asset.id,
       name: asset.name,
       type: asset.type,
-      size: asset.size || blob.size,
+      size: asset.size || files.reduce((total, file) => total + file.blob.size, 0),
       format: asset.format,
+      mainFileName: asset.mainFileName || asset.name,
       savedAt: asset.savedAt,
-      blob,
+      blob: files.find(file => file.isMain)?.blob || files[0].blob,
+      files,
     });
   }
 
