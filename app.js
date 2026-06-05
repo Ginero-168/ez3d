@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
+import { AutosaveCoordinator } from './src/autosaveCoordinator.js';
 import { CommandHistory } from './src/commandHistory.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { appendLayerRowContent, escapeHTML, tableRowsHtml } from './src/domRender.js';
@@ -50,6 +50,11 @@ let lightMarkers = [];   // invisible spheres for raycasting
 let _lightId     = 0;
 
 // ─── Undo / Redo (Command Pattern) ────────────────────────────────────────
+const autosave = new AutosaveCoordinator({
+    debounceMs: 700,
+    isReady: () => !!scene,
+    createSnapshot: () => createProjectSnapshot(),
+});
 const commandHistory = new CommandHistory({
     max: 50,
     onChange: _refreshUndoRedo,
@@ -70,9 +75,6 @@ let autoRotateEnabled = false;
 let guidesVisible   = true;
 let _tilePaintBatch = []; // group tile paints into one undo entry
 let _activeLightUndo = null;
-const AUTOSAVE_DEBOUNCE_MS = 700;
-let _autosaveTimer = null;
-let _suspendAutosave = false;
 
 // ─── Base physical dimensions at scale(1,1,1) in meters ───────────────────
 const BASE_DIMS = {
@@ -2302,23 +2304,19 @@ function createProjectSnapshot() {
 }
 
 function _queueAutosave() {
-    if (_suspendAutosave || !scene) return;
-    clearTimeout(_autosaveTimer);
-    _autosaveTimer = setTimeout(_writeAutosaveNow, AUTOSAVE_DEBOUNCE_MS);
+    autosave.queue();
 }
 
 function _writeAutosaveNow() {
-    if (_suspendAutosave || !scene) return;
-    writeAutosaveDraft(createProjectSnapshot());
+    return autosave.flush();
 }
 
 function _readAutosave() {
-    return readAutosaveDraft();
+    return autosave.read();
 }
 
 function clearAutosaveDraft() {
-    clearTimeout(_autosaveTimer);
-    clearAutosaveDraftStorage();
+    autosave.clear();
 }
 
 function restoreAutosaveDraft() {
@@ -2328,7 +2326,7 @@ function restoreAutosaveDraft() {
 }
 
 function _maybePromptAutosaveRestore() {
-    if (_suspendAutosave) return;
+    if (autosave.isSuspended()) return;
     const snapshot = _readAutosave();
     if (!snapshot) return;
     const savedAt = snapshot.savedAt ? new Date(snapshot.savedAt).toLocaleString('th-TH') : 'ไม่ทราบเวลา';
@@ -2419,7 +2417,7 @@ async function loadProjectSnapshot(snapshot, options = {}) {
         return;
     }
 
-    _suspendAutosave = true;
+    autosave.setSuspended(true);
     try {
         const W = project.space?.width || 15;
         const L = project.space?.length || 15;
@@ -2478,7 +2476,7 @@ async function loadProjectSnapshot(snapshot, options = {}) {
         renderCommentPins();
         commandHistory.clear();
     } finally {
-        _suspendAutosave = false;
+        autosave.setSuspended(false);
         if (!options.preserveAutosave) _queueAutosave();
     }
 }
@@ -3123,7 +3121,6 @@ function _installDebugHooks() {
             return targets.length === list.length;
         },
         flushAutosave() {
-            clearTimeout(_autosaveTimer);
             _writeAutosaveNow();
             return _readAutosave();
         },
@@ -3221,6 +3218,5 @@ _g.beginLightUndo      = beginLightUndo;
 _g.commitLightUndo     = commitLightUndo;
 _installDebugHooks();
 window.addEventListener('beforeunload', () => {
-    clearTimeout(_autosaveTimer);
     _writeAutosaveNow();
 });
