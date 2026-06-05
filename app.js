@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
+import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFile } from './src/modelLoaders.js';
 import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, isProjectSnapshot } from './src/projectSnapshot.js';
 import './styles.css';
 
@@ -2509,68 +2509,72 @@ function loadProjectFile(file) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// CUSTOM GLTF MODEL LOADER
+// CUSTOM 3D MODEL LOADER
 // ══════════════════════════════════════════════════════════════════════════
-function loadGLTFObject(file) {
+function _prepareCustomModel(model, file, format) {
+    model.traverse(child => {
+        if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
+
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    if (size.length() === 0) {
+        throw new Error('Model has no renderable geometry.');
+    }
+
+    model.position.x = -center.x;
+    model.position.z = -center.z;
+    model.position.y = -box.min.y;
+
+    const wrapper = new THREE.Group();
+    wrapper.add(model);
+    wrapper.name = file.name.replace(/\.[^.]+$/, '');
+    wrapper.userData = {
+        type: 'custom',
+        category: 'prop',
+        format,
+        baseDims: { w: size.x, h: size.y, d: size.z }
+    };
+
+    return wrapper;
+}
+
+async function load3DObject(file) {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    const loader = new GLTFLoader();
-    
-    // Show loader overlay
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.classList.remove('hidden');
-    
-    loader.load(url, (gltf) => {
-        const model = gltf.scene;
-        
-        // Enable shadows for custom model meshes
-        model.traverse(child => {
-            if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-            }
-        });
-        
-        // Calculate dimensions
-        const box = new THREE.Box3().setFromObject(model);
-        const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-        
-        // Align model center X/Z and Y-bottom on floor
-        model.position.x = -center.x;
-        model.position.z = -center.z;
-        model.position.y = -box.min.y;
-        
-        // Wrap in parent group for clean transformation anchors
-        const wrapper = new THREE.Group();
-        wrapper.add(model);
-        wrapper.name = file.name.replace(/\.[^.]+$/, '');
-        wrapper.userData = {
-            type: 'custom',
-            category: 'prop',
-            baseDims: { w: size.x, h: size.y, d: size.z }
-        };
-        
-        // Position at spawn coordinates (origin)
+
+    try {
+        if (!SUPPORTED_MODEL_EXTENSIONS.includes(ext)) {
+            throw new Error(`Unsupported 3D format: .${ext || 'unknown'}`);
+        }
+
+        const { object: model, format } = await loadModelFromFile(file);
+        const wrapper = _prepareCustomModel(model, file, format);
         wrapper.position.set(0, 0, 0);
-        
+
         scene.add(wrapper);
         draggableObjects.push(wrapper);
         updateLayerList();
-        
+
         _cmdAddObject(wrapper);
         selectObject(wrapper);
-        URL.revokeObjectURL(url);
-        
-        // Hide loader overlay
+    } catch (error) {
+        console.error("Error loading 3D model:", error);
+        alert(`ไม่สามารถโหลดไฟล์ 3D นี้ได้\nรองรับไฟล์: ${MODEL_FILE_ACCEPT.replaceAll(',', ' / ')}`);
+    } finally {
         if (overlay) overlay.classList.add('hidden');
-    }, undefined, (error) => {
-        console.error("Error loading GLTF model:", error);
-        alert("ไม่สามารถโหลดไฟล์ 3D นี้ได้ กรุณาตรวจสอบว่าเป็นไฟล์ GLTF/GLB ที่ถูกต้อง");
-        
-        // Hide loader overlay
-        if (overlay) overlay.classList.add('hidden');
-    });
+    }
+}
+
+function loadGLTFObject(file) {
+    return load3DObject(file);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -2847,7 +2851,7 @@ function collectProposalInventory() {
         cashier: 'เคาน์เตอร์แคชเชียร์ (Cashier)',
         rollup: 'ป้ายโรลอัปแบนเนอร์ (Rollup)',
         group: 'กลุ่มวัตถุ (Group)',
-        custom: 'โมเดล 3D พิเศษ (GLTF)'
+        custom: 'โมเดล 3D พิเศษ'
     };
     
     // Scan draggableObjects and populate counts recursively
@@ -3200,6 +3204,7 @@ _g.setLightAngle=setLightAngle; _g.setLightPenumbra=setLightPenumbra; _g.setLigh
 _g.setLightSkyColor=setLightSkyColor; _g.setLightGroundColor=setLightGroundColor;
 _g.renameLightEntry=renameLightEntry;
 _g.toggleLeftPanel     = toggleLeftPanel;
+_g.load3DObject        = load3DObject;
 _g.loadGLTFObject      = loadGLTFObject;
 _g.paintAllTiles       = paintAllTiles;
 _g.setGizmoMode        = setGizmoMode;

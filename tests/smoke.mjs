@@ -194,6 +194,22 @@ async function run() {
     }, draft);
     if (clearedDraft) throw new Error('Workspace clear did not remove autosave draft.');
 
+    await page.locator('#model-file-input').setInputFiles({
+      name: 'smoke.obj',
+      mimeType: 'text/plain',
+      buffer: Buffer.from([
+        'o SmokeTriangle',
+        'v 0 0 0',
+        'v 1 0 0',
+        'v 0 1 0',
+        'f 1 2 3',
+      ].join('\n')),
+    });
+    await page.waitForFunction(() => {
+      const state = window.__ez3dDebug.getState();
+      return state.objects.some(obj => obj.name === 'smoke' && obj.type === 'custom' && obj.format === 'obj');
+    }, null, { timeout: 5000 });
+
     await page.locator('#snap-toggle-btn').click();
     const snapText = await page.locator('#snap-toggle-text').innerText();
     if (!snapText.includes('OFF')) throw new Error(`Snap did not toggle off: ${snapText}`);

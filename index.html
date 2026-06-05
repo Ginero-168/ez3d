@@ -440,7 +440,7 @@
                 <!-- Custom 3D Object Upload -->
                 <div class="space-y-1.5 pt-1">
                     <p class="section-label">โมเดล 3D กำหนดเอง</p>
-                    <button onclick="document.getElementById('gltf-file-input').click()" class="asset-btn border-dashed border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10">
+                    <button onclick="document.getElementById('model-file-input').click()" class="asset-btn border-dashed border-emerald-500/20 hover:border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10">
                         <div class="asset-icon bg-emerald-500/10">
                             <svg class="w-5 h-5 text-emerald-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -448,9 +448,9 @@
                         </div>
                         <div class="ml-2.5 min-w-0 text-left">
                             <span class="text-emerald-400 font-semibold block text-xs">อัปโหลดไฟล์ 3D</span>
-                            <span class="text-[10px] text-emerald-400/50">รองรับ .gltf / .glb</span>
+                            <span class="text-[10px] text-emerald-400/50">GLB, GLTF, FBX, OBJ, STL, PLY, DAE</span>
                         </div>
-                        <input type="file" id="gltf-file-input" class="hidden" accept=".gltf,.glb" onchange="loadGLTFObject(this.files[0])">
+                        <input type="file" id="model-file-input" class="hidden" accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.dae" onchange="load3DObject(this.files[0]); this.value = '';">
                     </button>
                 </div>
             </div>
