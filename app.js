@@ -3,11 +3,13 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
+import { appendLayerRowContent, escapeHTML, tableRowsHtml } from './src/domRender.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
 import { clearModelAssets, getModelAsset, recordToFiles, saveModelAsset } from './src/modelAssetStore.js';
 import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFiles } from './src/modelLoaders.js';
 import { createProjectBundleBlob, loadProjectBundleFile } from './src/projectBundle.js';
 import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, normalizeProjectSnapshot } from './src/projectSnapshot.js';
+import { disposeObject3D } from './src/threeDisposal.js';
 import './styles.css';
 
 // Ez3d — Exhibition Space 3D Mockup Studio
@@ -239,25 +241,6 @@ function _setTileColor(idx, hexColor) {
     }
 }
 
-function _disposeMaterial(material) {
-    if (!material) return;
-    const materials = Array.isArray(material) ? material : [material];
-    materials.forEach(mat => {
-        Object.values(mat).forEach(value => {
-            if (value?.isTexture) value.dispose?.();
-        });
-        mat.dispose?.();
-    });
-}
-
-function _disposeObject3D(obj) {
-    if (!obj) return;
-    obj.traverse?.(child => {
-        child.geometry?.dispose?.();
-        _disposeMaterial(child.material);
-    });
-}
-
 // Command: Tile paint batch
 function _commitTileBatch() {
     if (!_tilePaintBatch.length) return;
@@ -290,14 +273,14 @@ function _removeFromScene(obj, { dispose = false } = {}) {
     if (idx > -1) draggableObjects.splice(idx, 1);
     if (obj.userData.outlineHelper) {
         scene.remove(obj.userData.outlineHelper);
-        _disposeObject3D(obj.userData.outlineHelper);
+        disposeObject3D(obj.userData.outlineHelper);
         delete obj.userData.outlineHelper;
     }
     scene.remove(obj);
     if (selectedObject === obj) {
         deselectObject();
     }
-    if (dispose) _disposeObject3D(obj);
+    if (dispose) disposeObject3D(obj);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1631,11 +1614,11 @@ function deleteLightEntry(entry, noUndo = false, { dispose = noUndo } = {}) {
         const mi = lightMarkers.indexOf(entry.marker);
         if (mi > -1) lightMarkers.splice(mi, 1);
         scene.remove(entry.marker);
-        if (dispose) _disposeObject3D(entry.marker);
+        if (dispose) disposeObject3D(entry.marker);
     }
     if (dispose) {
-        _disposeObject3D(entry.light);
-        _disposeObject3D(entry.light.target);
+        disposeObject3D(entry.light);
+        disposeObject3D(entry.light.target);
     }
     if (selectedLight === entry) { selectedLight = null; updateUI(); }
     updateLayerList();
@@ -2010,26 +1993,6 @@ function applyRotation(deg){ setRotationY(deg); }
 // ══════════════════════════════════════════════════════════════════════════
 // LAYER LIST
 // ══════════════════════════════════════════════════════════════════════════
-function _trustedSvgFragment(svg) {
-    const template = document.createElement('template');
-    template.innerHTML = svg || '';
-    return template.content.cloneNode(true);
-}
-
-function _appendLayerRowContent(item, svgIcon, label, selected, selectedClass) {
-    item.appendChild(_trustedSvgFragment(svgIcon));
-    const nameEl = document.createElement('span');
-    nameEl.className = 'flex-1 truncate font-medium ml-1.5';
-    nameEl.textContent = label || 'Untitled';
-    item.appendChild(nameEl);
-    if (selected) {
-        const checkEl = document.createElement('span');
-        checkEl.className = `${selectedClass} text-[9px] flex-shrink-0`;
-        checkEl.textContent = '✓';
-        item.appendChild(checkEl);
-    }
-}
-
 function updateLayerList() {
     const c = document.getElementById('layer-list');
     if (!c) return;
@@ -2055,7 +2018,7 @@ function updateLayerList() {
                 (sel ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300' : 'bg-white/5 border-transparent hover:bg-white/10 text-white/75');
             item.onclick = () => { showLeftTab('layers'); selectObject(obj); };
             const svgIcon = OBJECT_LAYER_ICONS[obj.userData.type] || OBJECT_LAYER_ICONS.custom;
-            _appendLayerRowContent(item, svgIcon, obj.name, sel, 'text-cyan-400');
+            appendLayerRowContent(item, svgIcon, obj.name, sel, 'text-cyan-400');
             c.appendChild(item);
         });
     }
@@ -2074,7 +2037,7 @@ function updateLayerList() {
                 (sel ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300' : 'bg-white/5 border-transparent hover:bg-white/10 text-white/75');
             item.onclick = () => { showLeftTab('layers'); selectLight(entry); };
             const svgIcon = LIGHT_LAYER_ICONS[entry.type] || LIGHT_LAYER_ICONS.point;
-            _appendLayerRowContent(item, svgIcon, entry.name, sel, 'text-yellow-400');
+            appendLayerRowContent(item, svgIcon, entry.name, sel, 'text-yellow-400');
             c.appendChild(item);
         });
     }
@@ -2725,15 +2688,6 @@ function loadGLTFObject(file) {
 // ══════════════════════════════════════════════════════════════════════════
 // INTERACTIVE PROPOSAL MODE & 3D COMMENT PINS
 // ══════════════════════════════════════════════════════════════════════════
-function escapeHTML(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#039;');
-}
-
 function toggleProposalMode() {
     proposalModeActive = !proposalModeActive;
     
@@ -3161,16 +3115,6 @@ function updateProposalCommentsList() {
     });
 }
 
-function _tableRowsHtml(rows, emptyText) {
-    if (!rows.length) return `<tr><td colspan="2" class="muted">${escapeHTML(emptyText)}</td></tr>`;
-    return rows.map(row => `
-        <tr>
-            <td>${escapeHTML(row.name)}</td>
-            <td class="num">${row.count !== undefined ? `x${row.count}` : `฿${row.cost.toLocaleString()}`}</td>
-        </tr>
-    `).join('');
-}
-
 function downloadProposalSummary() {
     const inventory = collectProposalInventory();
     const cost = collectProposalCostEstimate();
@@ -3203,8 +3147,8 @@ ul{margin:0;padding-left:20px;font-size:13px;line-height:1.7}.muted{color:#6b728
 <main>
 ${screenshot ? `<img class="shot" src="${screenshot}" alt="Ez3d mockup screenshot">` : ''}
 <div class="grid">
-<section><h2>Assets Inventory</h2><table>${_tableRowsHtml(inventory, 'ไม่มีวัตถุในฉาก')}</table></section>
-<section><h2>Cost Estimate</h2><table>${_tableRowsHtml(cost.lines, 'ไม่มีรายการค่าใช้จ่าย')}<tr class="total"><td>รวมประมาณการทั้งสิ้น</td><td class="num">฿${cost.totalCost.toLocaleString()}</td></tr></table></section>
+<section><h2>Assets Inventory</h2><table>${tableRowsHtml(inventory, 'ไม่มีวัตถุในฉาก')}</table></section>
+<section><h2>Cost Estimate</h2><table>${tableRowsHtml(cost.lines, 'ไม่มีรายการค่าใช้จ่าย')}<tr class="total"><td>รวมประมาณการทั้งสิ้น</td><td class="num">฿${cost.totalCost.toLocaleString()}</td></tr></table></section>
 </div>
 <section><h2>Review Comments</h2><ul>${commentsHtml}</ul></section>
 </main>
