@@ -310,6 +310,19 @@ async function run() {
       return state.objects.some(obj => obj.name === 'smoke_ply' && obj.type === 'custom' && obj.format === 'ply');
     }, null, { timeout: 15000 });
 
+    const multiFormatRestoreState = await page.evaluate(async () => {
+      const snapshot = window.createProjectSnapshot();
+      window.clearAllWorkspace();
+      await window.loadProjectSnapshot(snapshot);
+      return window.__ez3dDebug.getState();
+    });
+    for (const [name, format] of [['smoke_stl', 'stl'], ['smoke_ply', 'ply']]) {
+      const restored = multiFormatRestoreState.objects.find(obj => obj.name === name);
+      if (!restored || restored.type !== 'custom' || restored.format !== format || !restored.modelAssetId) {
+        throw new Error(`Custom ${format.toUpperCase()} model did not restore from project snapshot.`);
+      }
+    }
+
     await page.locator('#model-file-input').setInputFiles([
       {
         name: 'multi.obj',
@@ -388,6 +401,15 @@ async function run() {
     if (!(await page.locator('#light-selected-panel').isVisible())) {
       throw new Error('Light property panel did not open after adding point light.');
     }
+
+    await page.locator('#lp-visible').evaluate(el => {
+      el.checked = false;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.evaluate(() => window.undo());
+    await page.waitForTimeout(100);
+    const visibleAfterUndo = await page.evaluate(() => window.__ez3dDebug.getState().lights.at(-1)?.visible);
+    if (visibleAfterUndo !== true) throw new Error(`Light visibility undo failed; got ${visibleAfterUndo}.`);
 
     await page.locator('#lp-intensity').fill('2.35');
     await page.locator('#lp-intensity').evaluate(el => el.dispatchEvent(new Event('change', { bubbles: true })));

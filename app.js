@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { AutosaveCoordinator } from './src/autosaveCoordinator.js';
 import { CommandHistory } from './src/commandHistory.js';
+import { findMainModelFile, modelFileExtension, normalizeModelInput, prepareCustomModel } from './src/customModelTools.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { appendLayerRowContent, escapeHTML, tableRowsHtml } from './src/domRender.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
@@ -2344,9 +2345,9 @@ async function _restoreSerializedCustomObject(item) {
         console.warn('Missing custom model asset for project object:', item.modelAssetId);
         return null;
     }
-    const mainFile = files.find(file => file.name === (record.mainFileName || record.name)) || files[0];
+    const mainFile = files.find(file => file.name === (record.mainFileName || record.name)) || findMainModelFile(files);
     const { object: model, format } = await loadModelFromFiles(files);
-    const wrapper = _prepareCustomModel(model, mainFile, format || item.format);
+    const wrapper = prepareCustomModel(model, mainFile, format || item.format);
     wrapper.name = item.name || wrapper.name;
     wrapper.userData.modelAssetId = item.modelAssetId;
     wrapper.userData.modelFileName = item.modelFileName || record.name;
@@ -2440,47 +2441,11 @@ function loadProjectFile(file) {
         });
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// CUSTOM 3D MODEL LOADER
-// ══════════════════════════════════════════════════════════════════════════
-function _prepareCustomModel(model, file, format) {
-    model.traverse(child => {
-        if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-        }
-    });
-
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-
-    if (size.length() === 0) {
-        throw new Error('Model has no renderable geometry.');
-    }
-
-    model.position.x = -center.x;
-    model.position.z = -center.z;
-    model.position.y = -box.min.y;
-
-    const wrapper = new THREE.Group();
-    wrapper.add(model);
-    wrapper.name = file.name.replace(/\.[^.]+$/, '');
-    wrapper.userData = {
-        type: 'custom',
-        category: 'prop',
-        format,
-        baseDims: { w: size.x, h: size.y, d: size.z }
-    };
-
-    return wrapper;
-}
-
 async function load3DObject(input) {
-    const files = Array.from(input instanceof File ? [input] : (input || [])).filter(file => file instanceof File);
+    const files = normalizeModelInput(input);
     if (!files.length) return;
-    const mainFile = files.find(file => SUPPORTED_MODEL_EXTENSIONS.includes(file.name.split('.').pop()?.toLowerCase() || '')) || files[0];
-    const ext = mainFile.name.split('.').pop()?.toLowerCase() || '';
+    const mainFile = findMainModelFile(files);
+    const ext = modelFileExtension(mainFile);
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.classList.remove('hidden');
 
@@ -2491,7 +2456,7 @@ async function load3DObject(input) {
 
         const { object: model, format } = await loadModelFromFiles(files);
         const asset = await saveModelAsset(files, { format, mainFileName: mainFile.name });
-        const wrapper = _prepareCustomModel(model, mainFile, format);
+        const wrapper = prepareCustomModel(model, mainFile, format);
         wrapper.userData.modelAssetId = asset.id;
         wrapper.userData.modelFileName = asset.name;
         wrapper.position.set(0, 0, 0);
