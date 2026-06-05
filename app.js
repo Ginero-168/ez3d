@@ -6,6 +6,7 @@ import { CommandHistory } from './src/commandHistory.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { appendLayerRowContent, escapeHTML, tableRowsHtml } from './src/domRender.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
+import { applyLightProps, getLightProps, lightPropsChanged } from './src/lightProperties.js';
 import { clearModelAssets, getModelAsset, recordToFiles, saveModelAsset } from './src/modelAssetStore.js';
 import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFiles } from './src/modelLoaders.js';
 import { downloadProjectJson, downloadProjectZip, readProjectFileSnapshot } from './src/projectIO.js';
@@ -221,8 +222,8 @@ function _commitDrag() {
 // Command: Light property change
 function _cmdLightProp(entry, prevProps, newProps) {
     _pushCmd({
-        undo() { _applyLightProps(entry, prevProps); syncLightPanel(); },
-        redo() { _applyLightProps(entry, newProps);  syncLightPanel(); }
+        undo() { applyLightProps(entry, prevProps); updateLightHelper(entry); syncLightEntryVisibility(entry); syncLightPanel(); updateLayerList(); },
+        redo() { applyLightProps(entry, newProps); updateLightHelper(entry); syncLightEntryVisibility(entry); syncLightPanel(); updateLayerList(); }
     });
 }
 
@@ -1595,6 +1596,12 @@ function updateLightHelper(entry) {
     if (entry.marker) entry.marker.position.copy(entry.light.position);
 }
 
+function syncLightEntryVisibility(entry) {
+    if (!entry) return;
+    if (entry.helper) entry.helper.visible = entry.light.visible && guidesVisible;
+    if (entry.marker) entry.marker.material.visible = entry.light.visible && entry === selectedLight && guidesVisible;
+}
+
 // Light Presets (research-backed exhibition setups)
 function applyLightPreset(preset) {
     // Remove all non-permanent lights
@@ -1635,59 +1642,22 @@ function applyLightPreset(preset) {
     commandHistory.clear();
 }
 
-// ─── Light Property Snapshot ──────────────────────────────────────────────
-function _getLightProps(entry) {
-    const l = entry.light;
-    return {
-        color:       '#' + l.color.getHexString(),
-        intensity:   l.intensity,
-        visible:     l.visible,
-        castShadow:  l.castShadow,
-        posX: l.position?.x ?? 0, posY: l.position?.y ?? 0, posZ: l.position?.z ?? 0,
-        tgtX: l.target?.position.x ?? 0, tgtY: l.target?.position.y ?? 0, tgtZ: l.target?.position.z ?? 0,
-        angle:    l.angle,
-        penumbra: l.penumbra,
-        distance: l.distance,
-        skyColor:    entry.type === 'hemisphere' ? ('#' + l.color.getHexString())    : null,
-        groundColor: entry.type === 'hemisphere' ? ('#' + l.groundColor?.getHexString()) : null,
-    };
-}
-
-function _applyLightProps(entry, props) {
-    const l = entry.light;
-    if (props.color    !== undefined) l.color.set(props.color);
-    if (props.intensity !== undefined) l.intensity = props.intensity;
-    if (props.visible   !== undefined) l.visible   = props.visible;
-    if (props.castShadow !== undefined) l.castShadow = props.castShadow;
-    if (props.posX !== undefined && l.position) l.position.set(props.posX, props.posY, props.posZ);
-    if (props.tgtX !== undefined && l.target)   l.target.position.set(props.tgtX, props.tgtY, props.tgtZ);
-    if (props.angle    !== undefined) l.angle    = props.angle;
-    if (props.penumbra !== undefined) l.penumbra = props.penumbra;
-    if (props.distance !== undefined) l.distance = props.distance;
-    if (props.groundColor && l.groundColor) l.groundColor.set(props.groundColor);
-    updateLightHelper(entry);
-}
-
 // ─── Light Property Setters (called from HTML) ────────────────────────────
 function _withLightUndo(apply) {
     if (!selectedLight) return;
-    const prev = _getLightProps(selectedLight);
+    const prev = getLightProps(selectedLight);
     apply(selectedLight.light);
     updateLightHelper(selectedLight);
-    const next = _getLightProps(selectedLight);
+    const next = getLightProps(selectedLight);
     const entry = selectedLight;
     _pushLightPropCmd(entry, prev, next);
 }
 
-function _lightPropsChanged(prev, next) {
-    return JSON.stringify(prev) !== JSON.stringify(next);
-}
-
 function _pushLightPropCmd(entry, prev, next) {
-    if (!entry || !_lightPropsChanged(prev, next)) return;
+    if (!entry || !lightPropsChanged(prev, next)) return;
     _pushCmd({
-        undo() { _applyLightProps(entry, prev); syncLightPanel(); },
-        redo() { _applyLightProps(entry, next); syncLightPanel(); }
+        undo() { applyLightProps(entry, prev); updateLightHelper(entry); syncLightEntryVisibility(entry); syncLightPanel(); updateLayerList(); },
+        redo() { applyLightProps(entry, next); updateLightHelper(entry); syncLightEntryVisibility(entry); syncLightPanel(); updateLayerList(); }
     });
 }
 
@@ -1695,7 +1665,7 @@ function beginLightUndo() {
     if (!selectedLight || _activeLightUndo) return;
     _activeLightUndo = {
         entry: selectedLight,
-        prev: _getLightProps(selectedLight)
+        prev: getLightProps(selectedLight)
     };
 }
 
@@ -1703,7 +1673,7 @@ function commitLightUndo() {
     if (!_activeLightUndo) return;
     const { entry, prev } = _activeLightUndo;
     _activeLightUndo = null;
-    const next = _getLightProps(entry);
+    const next = getLightProps(entry);
     _pushLightPropCmd(entry, prev, next);
     syncLightPanel();
 }
@@ -1738,7 +1708,16 @@ function setLightPenumbra(v) { _applyLightLive(l => { l.penumbra = Math.max(0, M
 function setLightDistance(v) { _applyLightLive(l => { l.distance = parseFloat(v)||0; }); }
 function setLightSkyColor(hex, commit = true) { _applyLightLive(l => l.color.set(hex), commit); }
 function setLightGroundColor(hex, commit = true) { _applyLightLive(l => { if (l.groundColor) l.groundColor.set(hex); }, commit); }
-function renameLightEntry(v)      { if(selectedLight) { selectedLight.name = v; updateLayerList(); }}
+function renameLightEntry(v) {
+    if (!selectedLight) return;
+    const entry = selectedLight;
+    const prev = getLightProps(entry);
+    entry.name = v;
+    const next = getLightProps(entry);
+    updateLayerList();
+    syncLightPanel();
+    _pushLightPropCmd(entry, prev, next);
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // UI — RIGHT PANEL
@@ -2266,7 +2245,7 @@ function createProjectSnapshot() {
         gridSnapSize,
         guidesVisible,
         isLightMode,
-        getLightProps: _getLightProps,
+        getLightProps,
     });
 }
 
@@ -2413,7 +2392,9 @@ async function loadProjectSnapshot(snapshot, options = {}) {
             const entry = _buildLightEntry(item.type, { ...(item.props || {}), name: item.name });
             sceneLights.push(entry);
             _attachLightToScene(entry);
-            _applyLightProps(entry, item.props || {});
+            applyLightProps(entry, item.props || {});
+            updateLightHelper(entry);
+            syncLightEntryVisibility(entry);
         });
 
         (project.carpet || []).forEach((color, idx) => {
@@ -3065,6 +3046,16 @@ function _installDebugHooks() {
             const selectionCenter = selectedObjects.length ? _getSelectionCenter() : null;
             return {
                 objects: draggableObjects.map(_debugObjectSnapshot),
+                lights: sceneLights.map(entry => ({
+                    id: entry.id,
+                    type: entry.type,
+                    name: entry.name,
+                    color: `#${entry.light.color.getHexString()}`,
+                    intensity: entry.light.intensity,
+                    visible: entry.light.visible,
+                    castShadow: entry.light.castShadow,
+                    distance: entry.light.distance,
+                })),
                 selectedNames: selectedObjects.map(obj => obj.name),
                 selectedObjectName: selectedObject?.name || null,
                 selectedCount: selectedObjects.length,

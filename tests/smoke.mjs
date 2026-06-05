@@ -2,10 +2,12 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { platform } from 'node:os';
 import { chromium } from 'playwright';
+import { SUPPORTED_MODEL_EXTENSIONS } from '../src/modelLoaders.js';
 
 const PORT = 5173;
 const URL = `http://127.0.0.1:${PORT}/`;
 const EPSILON = 0.01;
+const REQUIRED_MODEL_FORMATS = ['glb', 'gltf', 'fbx', 'obj', 'stl', 'ply', 'dae'];
 
 function assertNearVector(actual, expected, label) {
   for (const axis of ['x', 'y', 'z']) {
@@ -45,6 +47,12 @@ function startServer() {
 }
 
 async function run() {
+  for (const format of REQUIRED_MODEL_FORMATS) {
+    if (!SUPPORTED_MODEL_EXTENSIONS.includes(format)) {
+      throw new Error(`Supported model formats missing .${format}.`);
+    }
+  }
+
   const server = startServer();
   await server.ready;
 
@@ -251,6 +259,57 @@ async function run() {
       throw new Error('Custom OBJ model did not restore from project snapshot.');
     }
 
+    const modelAccept = await page.locator('#model-file-input').getAttribute('accept');
+    for (const format of REQUIRED_MODEL_FORMATS) {
+      if (!modelAccept.includes(`.${format}`)) {
+        throw new Error(`Model file input does not accept .${format}: ${modelAccept}`);
+      }
+    }
+
+    await page.locator('#model-file-input').setInputFiles({
+      name: 'smoke_stl.stl',
+      mimeType: 'model/stl',
+      buffer: Buffer.from([
+        'solid smoke_stl',
+        'facet normal 0 0 1',
+        'outer loop',
+        'vertex 0 0 0',
+        'vertex 1 0 0',
+        'vertex 0 1 0',
+        'endloop',
+        'endfacet',
+        'endsolid smoke_stl',
+      ].join('\n')),
+    });
+    await page.waitForFunction(() => {
+      const state = window.__ez3dDebug.getState();
+      return state.objects.some(obj => obj.name === 'smoke_stl' && obj.type === 'custom' && obj.format === 'stl');
+    }, null, { timeout: 15000 });
+
+    await page.locator('#model-file-input').setInputFiles({
+      name: 'smoke_ply.ply',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from([
+        'ply',
+        'format ascii 1.0',
+        'element vertex 3',
+        'property float x',
+        'property float y',
+        'property float z',
+        'element face 1',
+        'property list uchar int vertex_indices',
+        'end_header',
+        '0 0 0',
+        '1 0 0',
+        '0 1 0',
+        '3 0 1 2',
+      ].join('\n')),
+    });
+    await page.waitForFunction(() => {
+      const state = window.__ez3dDebug.getState();
+      return state.objects.some(obj => obj.name === 'smoke_ply' && obj.type === 'custom' && obj.format === 'ply');
+    }, null, { timeout: 15000 });
+
     await page.locator('#model-file-input').setInputFiles([
       {
         name: 'multi.obj',
@@ -337,14 +396,40 @@ async function run() {
     const undoneIntensity = await page.locator('#lp-intensity').inputValue();
     if (undoneIntensity !== '1.00') throw new Error(`Light undo failed; got ${undoneIntensity}.`);
 
-    const restoredLayerText = await page.evaluate(async () => {
+    await page.locator('#lp-name').fill('Smoke Point Key');
+    await page.locator('#lp-name').evaluate(el => el.dispatchEvent(new Event('change', { bubbles: true })));
+    await page.keyboard.press(platform() === 'darwin' ? 'Meta+Z' : 'Control+Z');
+    await page.waitForTimeout(100);
+    const undoneLightName = await page.locator('#lp-name').inputValue();
+    if (!undoneLightName.startsWith('Point Light')) {
+      throw new Error(`Light rename undo failed; got ${undoneLightName}.`);
+    }
+
+    await page.locator('#lp-color').evaluate(el => {
+      el.value = '#ff0000';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const redLight = await page.evaluate(() => window.__ez3dDebug.getState().lights.at(-1)?.color);
+    if (redLight !== '#ff0000') throw new Error(`Light color did not update before undo: ${redLight}`);
+    await page.evaluate(() => window.undo());
+    await page.waitForTimeout(100);
+    const undoneLightColor = await page.evaluate(() => window.__ez3dDebug.getState().lights.at(-1)?.color);
+    if (undoneLightColor === '#ff0000') throw new Error('Light color undo did not restore previous color.');
+
+    const restoredProjectState = await page.evaluate(async () => {
       const snapshot = window.createProjectSnapshot();
       window.clearAllWorkspace();
       await window.loadProjectSnapshot(snapshot);
-      return document.getElementById('layer-list').innerText;
+      return {
+        layerText: document.getElementById('layer-list').innerText,
+        state: window.__ez3dDebug.getState(),
+      };
     });
-    if (!restoredLayerText.includes('โต๊ะ #1')) throw new Error('Project load did not restore table.');
-    if (!restoredLayerText.includes('Point Light')) throw new Error('Project load did not restore point light.');
+    if (!restoredProjectState.layerText.includes('โต๊ะ #1')) throw new Error('Project load did not restore table.');
+    if (!restoredProjectState.state.lights.some(light => light.type === 'point')) {
+      throw new Error('Project load did not restore point light.');
+    }
 
     await page.evaluate(() => window.toggleProposalMode());
     await page.waitForTimeout(100);
