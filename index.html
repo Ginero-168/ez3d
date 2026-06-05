@@ -170,9 +170,9 @@
             transform: translateX(-50%) scale(1);
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-CY7CD7lu.js"></script>
+  <script type="module" crossorigin src="./assets/index-DMxIjl29.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-aKtaBQYM.js">
-  <link rel="modulepreload" crossorigin href="./assets/three-controls-Bh-GWiKR.js">
+  <link rel="modulepreload" crossorigin href="./assets/three-controls-CaraEoi1.js">
   <link rel="stylesheet" crossorigin href="./assets/index-mS_O5Ao6.css">
 </head>
 <body class="bg-[#0b0c10] text-[#c5c6c7] font-sans h-screen w-screen overflow-hidden select-none">
@@ -456,9 +456,9 @@
                         </div>
                         <div class="ml-2.5 min-w-0 text-left">
                             <span class="text-emerald-400 font-semibold block text-xs">อัปโหลดไฟล์ 3D</span>
-                            <span class="text-[10px] text-emerald-400/50">GLB, GLTF, FBX, OBJ, STL, PLY, DAE</span>
+                            <span class="text-[10px] text-emerald-400/50">GLB/GLTF, FBX, OBJ+MTL, STL, PLY, DAE</span>
                         </div>
-                        <input type="file" id="model-file-input" class="hidden" accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.dae" onchange="load3DObject(this.files[0]); this.value = '';">
+                        <input type="file" id="model-file-input" class="hidden" multiple accept=".glb,.gltf,.fbx,.obj,.stl,.ply,.dae,.bin,.mtl,.jpg,.jpeg,.png,.webp,.ktx2,.tga,.bmp" onchange="load3DObject(this.files); this.value = '';">
                     </button>
                 </div>
             </div>
