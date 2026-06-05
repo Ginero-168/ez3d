@@ -379,20 +379,20 @@ function init3D(W, L) {
         if (event.value) {
             if (selectedObjects.length > 0) {
                 _recordDragStart(selectedObjects.length === 1 ? selectedObjects[0] : selectionAnchor);
-                _beginAnchorTransform();
+                if (selectedObjects.length > 1) _beginAnchorTransform();
             }
         } else {
             if (selectedObjects.length > 0) {
-                _finishAnchorTransform();
+                if (selectedObjects.length > 1) _finishAnchorTransform();
                 _commitDrag();
             }
         }
     });
     transformControls.addEventListener('objectChange', () => {
-        if (selectedObjects.length > 0) {
+        if (selectedObjects.length > 1) {
             _applyAnchorDeltaToSelection();
-            syncTransformPanel();
         }
+        if (selectedObjects.length > 0) syncTransformPanel();
     });
     scene.add(transformControls);
 
@@ -943,6 +943,17 @@ function _destroySelectionAnchor() {
 function _syncSelectionAnchor() {
     if (!transformControls || selectedObjects.length === 0) {
         _destroySelectionAnchor();
+        return;
+    }
+    if (selectedObjects.length === 1) {
+        if (selectionAnchor) {
+            scene.remove(selectionAnchor);
+            selectionAnchor = null;
+        }
+        _anchorStartMatrix = null;
+        _anchorTargetStarts = [];
+        transformControls.attach(selectedObjects[0]);
+        transformControls.visible = guidesVisible;
         return;
     }
     const center = _getSelectionCenter();

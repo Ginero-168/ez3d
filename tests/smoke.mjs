@@ -93,17 +93,19 @@ async function run() {
 
     const singleTransformState = await page.evaluate(() => {
       window.applyRotation(35);
+      window.setScaleX(1.15);
       const state = window.__ez3dDebug.getState();
       const selected = state.objects.find(obj => obj.name === state.selectedNames[0]);
       return { state, selected };
     });
-    if (!singleTransformState.state.anchor) throw new Error('Selection anchor was not created for selected table.');
-    assertNearVector(
-      singleTransformState.state.anchor.position,
-      singleTransformState.selected.center,
-      'Single selection anchor'
-    );
+    if (Math.abs(singleTransformState.selected.rotation.y - (35 * Math.PI / 180)) > 0.01) {
+      throw new Error(`Single rotation bounced back; got ${singleTransformState.selected.rotation.y}.`);
+    }
+    if (Math.abs(singleTransformState.selected.scale.x - 1.15) > 0.01) {
+      throw new Error(`Single scale bounced back; got ${singleTransformState.selected.scale.x}.`);
+    }
 
+    await page.keyboard.press(platform() === 'darwin' ? 'Meta+Z' : 'Control+Z');
     await page.keyboard.press(platform() === 'darwin' ? 'Meta+Z' : 'Control+Z');
     await page.waitForTimeout(100);
     const singleUndoState = await page.evaluate(() => {
@@ -111,7 +113,9 @@ async function run() {
       const selected = state.objects.find(obj => obj.name === state.selectedNames[0]);
       return { state, selected };
     });
-    assertNearVector(singleUndoState.state.anchor.position, singleUndoState.selected.center, 'Single undo anchor');
+    if (Math.abs(singleUndoState.selected.rotation.y) > 0.01 || Math.abs(singleUndoState.selected.scale.x - 1) > 0.01) {
+      throw new Error('Single undo did not restore rotation/scale after direct object transform.');
+    }
 
     await page.locator('#tab-btn-objects').click();
     await page.locator("button[onclick=\"spawnItem('cashier')\"]").click();
@@ -168,7 +172,9 @@ async function run() {
     if (groupState.after.objects.length !== groupState.before.objects.length - 1) {
       throw new Error(`Grouping did not reduce top-level object count by 1; before ${groupState.before.objects.length}, after ${groupState.after.objects.length}.`);
     }
-    assertNearVector(groupState.after.anchor.position, grouped.center, 'Grouped selection anchor');
+    if (groupState.after.anchor) {
+      throw new Error('Grouped single selection should not use a transient selection anchor.');
+    }
 
     await page.keyboard.press(platform() === 'darwin' ? 'Meta+Z' : 'Control+Z');
     await page.waitForTimeout(100);
