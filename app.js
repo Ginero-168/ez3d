@@ -8,7 +8,8 @@ import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
 import { clearModelAssets, getModelAsset, recordToFiles, saveModelAsset } from './src/modelAssetStore.js';
 import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFiles } from './src/modelLoaders.js';
 import { createProjectBundleBlob, loadProjectBundleFile } from './src/projectBundle.js';
-import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, normalizeProjectSnapshot } from './src/projectSnapshot.js';
+import { createProjectSnapshotFromState } from './src/projectSerialization.js';
+import { normalizeProjectSnapshot } from './src/projectSnapshot.js';
 import { disposeObject3D } from './src/threeDisposal.js';
 import './styles.css';
 
@@ -2281,32 +2282,10 @@ function captureMockup() {
     Object.assign(document.createElement('a'), { download: `Ez3d-${spaceWidth}x${spaceLength}m.png`, href: url }).click();
 }
 
-function _serializeVec3(v) {
-    return [v.x, v.y, v.z];
-}
-
-function _serializeEuler(e) {
-    return [e.x, e.y, e.z, e.order];
-}
-
 function _applySerializedTransform(obj, data) {
     if (data.position) obj.position.fromArray(data.position);
     if (data.rotation) obj.rotation.set(data.rotation[0] || 0, data.rotation[1] || 0, data.rotation[2] || 0, data.rotation[3] || 'XYZ');
     if (data.scale) obj.scale.fromArray(data.scale);
-}
-
-function _getObjectColor(obj) {
-    const target = obj.userData.targetColorMesh || obj;
-    if (target.isMesh && !Array.isArray(target.material) && target.material?.color) {
-        return '#' + target.material.color.getHexString();
-    }
-    let hex = null;
-    target.traverse?.(c => {
-        if (!hex && c.isMesh && !Array.isArray(c.material) && c.material?.color) {
-            hex = '#' + c.material.color.getHexString();
-        }
-    });
-    return hex;
 }
 
 function _setObjectColor(obj, hex) {
@@ -2323,71 +2302,20 @@ function _setObjectColor(obj, hex) {
     });
 }
 
-function _serializeObject(obj) {
-    const type = obj.userData?.type;
-    if (type === 'custom') {
-        if (!obj.userData.modelAssetId) return null;
-        return {
-            type,
-            name: obj.name,
-            position: _serializeVec3(obj.position),
-            rotation: _serializeEuler(obj.rotation),
-            scale: _serializeVec3(obj.scale),
-            modelAssetId: obj.userData.modelAssetId,
-            modelFileName: obj.userData.modelFileName || obj.name,
-            format: obj.userData.format || null,
-            baseDims: obj.userData.baseDims || null,
-        };
-    }
-    if (!['backdrop', 'table', 'bookshelf', 'cashier', 'rollup'].includes(type)) return null;
-    return {
-        type,
-        name: obj.name,
-        position: _serializeVec3(obj.position),
-        rotation: _serializeEuler(obj.rotation),
-        scale: _serializeVec3(obj.scale),
-        color: _getObjectColor(obj),
-    };
-}
-
-function _serializeLight(entry) {
-    return {
-        type: entry.type,
-        name: entry.name,
-        props: _getLightProps(entry),
-    };
-}
-
-function _serializePin(pin) {
-    return {
-        id: pin.id,
-        position: _serializeVec3(pin.position),
-        text: pin.text || '',
-    };
-}
-
 function createProjectSnapshot() {
-    const objects = draggableObjects.map(_serializeObject).filter(Boolean);
-    const lights = sceneLights.map(_serializeLight);
-    const carpet = floorTiles.map(t => t.color);
-    const comments = commentPins.filter(p => !p.isEditing).map(_serializePin);
-    return {
-        schema: PROJECT_SCHEMA,
-        version: PROJECT_VERSION,
-        savedAt: new Date().toISOString(),
-        metadata: createSnapshotMetadata({ objects, lights, comments, carpet }),
-        space: { width: spaceWidth, length: spaceLength },
-        settings: {
-            gridSnapEnabled,
-            gridSnapSize,
-            guidesVisible,
-            isLightMode,
-        },
-        objects,
-        lights,
-        carpet,
-        comments,
-    };
+    return createProjectSnapshotFromState({
+        draggableObjects,
+        sceneLights,
+        floorTiles,
+        commentPins,
+        spaceWidth,
+        spaceLength,
+        gridSnapEnabled,
+        gridSnapSize,
+        guidesVisible,
+        isLightMode,
+        getLightProps: _getLightProps,
+    });
 }
 
 function _queueAutosave() {
