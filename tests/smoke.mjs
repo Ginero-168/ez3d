@@ -186,10 +186,10 @@ async function run() {
       throw new Error(`Autosave restore did not recover objects; got ${restoredDraftState.objects.length}.`);
     }
 
-    const clearedDraft = await page.evaluate(snapshot => {
+    const clearedDraft = await page.evaluate(async snapshot => {
       window.clearAllWorkspace();
       const cleared = window.__ez3dDebug.readAutosave();
-      window.loadProjectSnapshot(snapshot);
+      await window.loadProjectSnapshot(snapshot);
       return cleared;
     }, draft);
     if (clearedDraft) throw new Error('Workspace clear did not remove autosave draft.');
@@ -210,6 +210,17 @@ async function run() {
       return state.objects.some(obj => obj.name === 'smoke' && obj.type === 'custom' && obj.format === 'obj');
     }, null, { timeout: 5000 });
 
+    const customRestoreState = await page.evaluate(async () => {
+      const snapshot = window.createProjectSnapshot();
+      window.clearAllWorkspace();
+      await window.loadProjectSnapshot(snapshot);
+      return window.__ez3dDebug.getState();
+    });
+    const restoredCustom = customRestoreState.objects.find(obj => obj.name === 'smoke');
+    if (!restoredCustom || restoredCustom.type !== 'custom' || restoredCustom.format !== 'obj' || !restoredCustom.modelAssetId) {
+      throw new Error('Custom OBJ model did not restore from project snapshot.');
+    }
+
     await page.locator('#snap-toggle-btn').click();
     const snapText = await page.locator('#snap-toggle-text').innerText();
     if (!snapText.includes('OFF')) throw new Error(`Snap did not toggle off: ${snapText}`);
@@ -227,10 +238,10 @@ async function run() {
     const undoneIntensity = await page.locator('#lp-intensity').inputValue();
     if (undoneIntensity !== '1.00') throw new Error(`Light undo failed; got ${undoneIntensity}.`);
 
-    const restoredLayerText = await page.evaluate(() => {
+    const restoredLayerText = await page.evaluate(async () => {
       const snapshot = window.createProjectSnapshot();
       window.clearAllWorkspace();
-      window.loadProjectSnapshot(snapshot);
+      await window.loadProjectSnapshot(snapshot);
       return document.getElementById('layer-list').innerText;
     });
     if (!restoredLayerText.includes('โต๊ะ #1')) throw new Error('Project load did not restore table.');

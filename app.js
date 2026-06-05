@@ -4,6 +4,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
+import { getModelAsset, recordToFile, saveModelAsset } from './src/modelAssetStore.js';
 import { MODEL_FILE_ACCEPT, SUPPORTED_MODEL_EXTENSIONS, loadModelFromFile } from './src/modelLoaders.js';
 import { PROJECT_SCHEMA, PROJECT_VERSION, createSnapshotMetadata, isProjectSnapshot } from './src/projectSnapshot.js';
 import './styles.css';
@@ -2283,6 +2284,20 @@ function _setObjectColor(obj, hex) {
 
 function _serializeObject(obj) {
     const type = obj.userData?.type;
+    if (type === 'custom') {
+        if (!obj.userData.modelAssetId) return null;
+        return {
+            type,
+            name: obj.name,
+            position: _serializeVec3(obj.position),
+            rotation: _serializeEuler(obj.rotation),
+            scale: _serializeVec3(obj.scale),
+            modelAssetId: obj.userData.modelAssetId,
+            modelFileName: obj.userData.modelFileName || obj.name,
+            format: obj.userData.format || null,
+            baseDims: obj.userData.baseDims || null,
+        };
+    }
     if (!['backdrop', 'table', 'bookshelf', 'cashier', 'rollup'].includes(type)) return null;
     return {
         type,
@@ -2357,8 +2372,7 @@ function clearAutosaveDraft() {
 function restoreAutosaveDraft() {
     const snapshot = _readAutosave();
     if (!snapshot) return false;
-    loadProjectSnapshot(snapshot, { preserveAutosave: true });
-    return true;
+    return loadProjectSnapshot(snapshot, { preserveAutosave: true }).then(() => true);
 }
 
 function _maybePromptAutosaveRestore() {
@@ -2429,77 +2443,102 @@ function _clearSceneContent() {
     _pinId = 0;
 }
 
-function loadProjectSnapshot(snapshot, options = {}) {
+async function _restoreSerializedCustomObject(item) {
+    const record = await getModelAsset(item.modelAssetId);
+    const file = recordToFile(record);
+    if (!file) {
+        console.warn('Missing custom model asset for project object:', item.modelAssetId);
+        return null;
+    }
+    const { object: model, format } = await loadModelFromFile(file);
+    const wrapper = _prepareCustomModel(model, file, format || item.format);
+    wrapper.name = item.name || wrapper.name;
+    wrapper.userData.modelAssetId = item.modelAssetId;
+    wrapper.userData.modelFileName = item.modelFileName || record.name;
+    _applySerializedTransform(wrapper, item);
+    scene.add(wrapper);
+    draggableObjects.push(wrapper);
+    return wrapper;
+}
+
+async function loadProjectSnapshot(snapshot, options = {}) {
     if (!isProjectSnapshot(snapshot)) {
         alert('ไฟล์นี้ไม่ใช่ Ez3d project JSON ที่ถูกต้อง');
         return;
     }
 
     _suspendAutosave = true;
-    const W = snapshot.space?.width || 15;
-    const L = snapshot.space?.length || 15;
-    if (!scene) {
-        document.getElementById('input-width').value = W;
-        document.getElementById('input-length').value = L;
-        submitDimensions();
+    try {
+        const W = snapshot.space?.width || 15;
+        const L = snapshot.space?.length || 15;
+        if (!scene) {
+            document.getElementById('input-width').value = W;
+            document.getElementById('input-length').value = L;
+            submitDimensions();
+        }
+
+        _clearSceneContent();
+        _rebuildSpaceGeometry(W, L);
+
+        for (const item of (snapshot.objects || [])) {
+            if (item.type === 'custom') {
+                await _restoreSerializedCustomObject(item);
+                continue;
+            }
+            const obj = spawnItem(item.type, false);
+            if (!obj) continue;
+            obj.name = item.name || obj.name;
+            _applySerializedTransform(obj, item);
+            _setObjectColor(obj, item.color);
+        }
+
+        (snapshot.lights || []).forEach(item => {
+            const entry = _buildLightEntry(item.type, { ...(item.props || {}), name: item.name });
+            sceneLights.push(entry);
+            _attachLightToScene(entry);
+            _applyLightProps(entry, item.props || {});
+        });
+
+        (snapshot.carpet || []).forEach((color, idx) => {
+            if (idx < floorTiles.length) _setTileColor(idx, color);
+        });
+        if (floorTilesMesh?.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
+
+        commentPins = (snapshot.comments || []).map(pin => {
+            _pinId = Math.max(_pinId, pin.id || 0);
+            return {
+                id: pin.id,
+                position: new THREE.Vector3().fromArray(pin.position || [0, 0, 0]),
+                text: pin.text || '',
+                isEditing: false,
+            };
+        });
+
+        const settings = snapshot.settings || {};
+        gridSnapEnabled = settings.gridSnapEnabled ?? gridSnapEnabled;
+        gridSnapSize = settings.gridSnapSize ?? gridSnapSize;
+        guidesVisible = settings.guidesVisible ?? guidesVisible;
+        if ((settings.isLightMode ?? false) !== isLightMode) toggleLightMode();
+
+        _syncGridSnapButton();
+        updateLayerList();
+        updateUI();
+        renderCommentPins();
+        _undoStack = [];
+        _redoStack = [];
+        _refreshUndoRedo();
+    } finally {
+        _suspendAutosave = false;
+        if (!options.preserveAutosave) _queueAutosave();
     }
-
-    _clearSceneContent();
-    _rebuildSpaceGeometry(W, L);
-
-    (snapshot.objects || []).forEach(item => {
-        const obj = spawnItem(item.type, false);
-        if (!obj) return;
-        obj.name = item.name || obj.name;
-        _applySerializedTransform(obj, item);
-        _setObjectColor(obj, item.color);
-    });
-
-    (snapshot.lights || []).forEach(item => {
-        const entry = _buildLightEntry(item.type, { ...(item.props || {}), name: item.name });
-        sceneLights.push(entry);
-        _attachLightToScene(entry);
-        _applyLightProps(entry, item.props || {});
-    });
-
-    (snapshot.carpet || []).forEach((color, idx) => {
-        if (idx < floorTiles.length) _setTileColor(idx, color);
-    });
-    if (floorTilesMesh?.instanceColor) floorTilesMesh.instanceColor.needsUpdate = true;
-
-    commentPins = (snapshot.comments || []).map(pin => {
-        _pinId = Math.max(_pinId, pin.id || 0);
-        return {
-            id: pin.id,
-            position: new THREE.Vector3().fromArray(pin.position || [0, 0, 0]),
-            text: pin.text || '',
-            isEditing: false,
-        };
-    });
-
-    const settings = snapshot.settings || {};
-    gridSnapEnabled = settings.gridSnapEnabled ?? gridSnapEnabled;
-    gridSnapSize = settings.gridSnapSize ?? gridSnapSize;
-    guidesVisible = settings.guidesVisible ?? guidesVisible;
-    if ((settings.isLightMode ?? false) !== isLightMode) toggleLightMode();
-
-    _syncGridSnapButton();
-    updateLayerList();
-    updateUI();
-    renderCommentPins();
-    _undoStack = [];
-    _redoStack = [];
-    _refreshUndoRedo();
-    _suspendAutosave = false;
-    if (!options.preserveAutosave) _queueAutosave();
 }
 
 function loadProjectFile(file) {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
         try {
-            loadProjectSnapshot(JSON.parse(reader.result));
+            await loadProjectSnapshot(JSON.parse(reader.result));
         } catch (err) {
             console.error('Error loading project file:', err);
             alert('โหลดไฟล์โปรเจกต์ไม่สำเร็จ กรุณาตรวจสอบไฟล์ JSON');
@@ -2556,7 +2595,10 @@ async function load3DObject(file) {
         }
 
         const { object: model, format } = await loadModelFromFile(file);
+        const asset = await saveModelAsset(file, { format });
         const wrapper = _prepareCustomModel(model, file, format);
+        wrapper.userData.modelAssetId = asset.id;
+        wrapper.userData.modelFileName = asset.name;
         wrapper.position.set(0, 0, 0);
 
         scene.add(wrapper);
