@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { clearAutosaveDraftStorage, readAutosaveDraft, writeAutosaveDraft } from './src/autosaveStorage.js';
+import { CommandHistory } from './src/commandHistory.js';
 import { objectDebugSnapshot, vectorSnapshot } from './src/debugSnapshots.js';
 import { appendLayerRowContent, escapeHTML, tableRowsHtml } from './src/domRender.js';
 import { LIGHT_LAYER_ICONS, OBJECT_LAYER_ICONS } from './src/layerIcons.js';
@@ -49,9 +50,11 @@ let lightMarkers = [];   // invisible spheres for raycasting
 let _lightId     = 0;
 
 // ─── Undo / Redo (Command Pattern) ────────────────────────────────────────
-let _undoStack = [];
-let _redoStack = [];
-const MAX_UNDO = 50;
+const commandHistory = new CommandHistory({
+    max: 50,
+    onChange: _refreshUndoRedo,
+    onExecute: _queueAutosave,
+});
 let _dragStart = null; // {obj|entry, pos, rot, scl} recorded at pointerdown
 let _multiDragStart = [];
 
@@ -86,36 +89,22 @@ const BASE_DIMS = {
 // COMMAND PATTERN — UNDO / REDO
 // ══════════════════════════════════════════════════════════════════════════
 function _pushCmd(cmd) {
-    _undoStack.push(cmd);
-    if (_undoStack.length > MAX_UNDO) _undoStack.shift();
-    _redoStack = [];
-    _refreshUndoRedo();
-    _queueAutosave();
+    commandHistory.push(cmd);
 }
 
 function undo() {
-    if (!_undoStack.length) return;
-    const cmd = _undoStack.pop();
-    cmd.undo();
-    _redoStack.push(cmd);
-    _refreshUndoRedo();
-    _queueAutosave();
+    commandHistory.undo();
 }
 
 function redo() {
-    if (!_redoStack.length) return;
-    const cmd = _redoStack.pop();
-    cmd.redo();
-    _undoStack.push(cmd);
-    _refreshUndoRedo();
-    _queueAutosave();
+    commandHistory.redo();
 }
 
 function _refreshUndoRedo() {
     const u = document.getElementById('btn-undo');
     const r = document.getElementById('btn-redo');
-    if (u) u.disabled = _undoStack.length === 0;
-    if (r) r.disabled = _redoStack.length === 0;
+    if (u) u.disabled = !commandHistory.canUndo();
+    if (r) r.disabled = !commandHistory.canRedo();
 }
 
 // Command: Add Object
@@ -425,9 +414,7 @@ function init3D(W, L) {
     backdrop.position.set(0, 1.25, -L / 2 + 0.075);
 
     // Capture initial state AFTER spawning (so first action is undo-able)
-    _undoStack = [];
-    _redoStack = [];
-    _refreshUndoRedo();
+    commandHistory.clear();
 
     // Event listeners — capture phase so we intercept before OrbitControls
     addEventListener('resize', onWindowResize);
@@ -1372,8 +1359,7 @@ function clearAllWorkspace() {
     renderCommentPins();
     updateLayerList();
     updateUI();
-    _undoStack = []; _redoStack = [];
-    _refreshUndoRedo();
+    commandHistory.clear();
     clearAutosaveDraft();
 }
 
@@ -1453,9 +1439,7 @@ function applyLayoutTemplate(templateKey, skipConfirm = false) {
     deselectObject();
     updateLayerList();
     updateUI();
-    _undoStack = [];
-    _redoStack = [];
-    _refreshUndoRedo();
+    commandHistory.clear();
     _queueAutosave();
 }
 
@@ -1675,8 +1659,7 @@ function applyLightPreset(preset) {
             break;
     }
     updateLayerList();
-    _undoStack = []; _redoStack = [];
-    _refreshUndoRedo();
+    commandHistory.clear();
 }
 
 // ─── Light Property Snapshot ──────────────────────────────────────────────
@@ -2507,9 +2490,7 @@ async function loadProjectSnapshot(snapshot, options = {}) {
         updateLayerList();
         updateUI();
         renderCommentPins();
-        _undoStack = [];
-        _redoStack = [];
-        _refreshUndoRedo();
+        commandHistory.clear();
     } finally {
         _suspendAutosave = false;
         if (!options.preserveAutosave) _queueAutosave();
